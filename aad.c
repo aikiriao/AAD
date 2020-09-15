@@ -394,7 +394,7 @@ static int32_t AADProcessor_DecodeSample(
 {
   int16_t idx;
   int32_t sample, qdiff, delta, predict, stepsize;
-  const uint8_t signbit = (1 << (bpsample - 1));
+  const uint8_t signbit = (uint8_t)(1U << (bpsample - 1));
   const uint8_t absmask = signbit - 1;
 
   assert(processor != NULL);
@@ -408,25 +408,11 @@ static int32_t AADProcessor_DecodeSample(
   stepsize = AAD_stepsize_table[idx];
 
   /* 差分算出 */
-  /* diff = stepsize * (delta + 0.5) / 4 */
-  /* -> diff = stepsize * (delta * 2 + 1) / 8 */
+  /* diff = stepsize * (delta + 0.5) / 2**(bpsample-2) */
+  /* -> diff = stepsize * (delta * 2 + 1) / 2**(bpsample-1) */
   delta = nibble & absmask;
   qdiff = (stepsize * ((delta << 1) + 1)) >> (bpsample - 1);
   qdiff = (nibble & signbit) ? -qdiff : qdiff; /* 符号ビットの反映 */
-#if 0
-  /* 3bit */
-  /* diff = stepsize * (delta + 0.5) / 2 */
-  /* -> diff = stepsize * (delta * 2 + 1) / 4 */
-  delta = nibble & 3;
-  qdiff = (stepsize * ((delta << 1) + 1)) >> 2;
-  qdiff = (nibble & 4) ? -qdiff : qdiff;
-  /* 2bit */
-  /* diff = stepsize * (delta + 0.5) */
-  /* -> diff = stepsize * (delta * 2 + 1) / 2 */
-  delta = nibble & 1;
-  qdiff = (stepsize * ((delta << 1) + 1)) >> 1;
-  qdiff = (nibble & 2) ? -qdiff : qdiff;
-#endif
 
   /* フィルタ予測 */
   predict = AAD_FIXEDPOINT_0_5;
@@ -557,6 +543,24 @@ static AADApiResult AADDecoder_DecodeBlock(
       }
       break;
     case 2:
+      for (smpl = AAD_FILTER_ORDER; smpl < tmp_num_decode_samples; smpl += 4) {
+        uint8_t code;
+        for (ch = 0; ch < header->num_channels; ch++) {
+          assert((uint32_t)(read_pos - data) < data_size);
+          assert((uint32_t)(read_pos - data) < header->block_size);
+          ByteArray_GetUint8(read_pos, &code);
+          // printf("%d %d %d \n", smpl, (uint32_t)(read_pos - data), code);
+          buffer[ch][smpl + 0] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 6) & 0x3, 2); 
+          buffer[ch][smpl + 1] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 4) & 0x3, 2); 
+          buffer[ch][smpl + 2] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 2) & 0x3, 2); 
+          buffer[ch][smpl + 3] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 0) & 0x3, 2); 
+          assert((uint32_t)(read_pos - data) <= data_size);
+          assert((uint32_t)(read_pos - data) <= header->block_size);
+          /* FIXME: smpl + 1 ... smpl + 3 がバッファオーバーランする可能性がある */
+        }
+        /* TODO: MS -> LR */
+      }
+      break;
     case 3:
     default:
       return AAD_APIRESULT_INVALID_FORMAT;
@@ -763,7 +767,7 @@ static uint8_t AADProcessor_EncodeSample(
   int16_t idx;
   int32_t predict, diff, qdiff, delta, stepsize, diffabs, sign;
   int32_t quantize_sample;
-  const uint8_t signbit = (1 << (bpsample - 1));
+  const uint8_t signbit = (uint8_t)(1U << (bpsample - 1));
   const uint8_t absmask = signbit - 1;
 
   assert(processor != NULL);
@@ -790,43 +794,19 @@ static uint8_t AADProcessor_EncodeSample(
   diffabs = sign ? -diff : diff;
 
   /* 差分を符号表現に変換 */
-  /* nibble = sign(diff) * round(|diff| * 4 / stepsize) */
+  /* nibble = sign(diff) * round(|diff| * 2**(bpsample-2) / stepsize) */
   nibble = (uint8_t)AAD_MIN_VAL((diffabs << (bpsample - 2)) / stepsize, absmask);
-#if 0
-  /* 3bit */
-  nibble = (uint8_t)AAD_MIN_VAL((diffabs << 1) / stepsize, 3);
-  /* 2bit */
-  nibble = (uint8_t)AAD_MIN_VAL(diffabs / stepsize, 1);
-#endif
   /* nibbleの最上位ビットは符号ビット */
   if (sign) {
-    nibble |= signbit;  /* 4bit */
-#if 0
-    nibble |= 0x4; /* 3bit */
-    nibble |= 0x2; /* 2bit */
-#endif
+    nibble |= signbit;
   }
 
   /* 量子化した差分を計算 */
-  /* diff = stepsize * (delta + 0.5) / 4 */
-  /* -> diff = stepsize * (delta * 2 + 1) / 8 */
+  /* diff = stepsize * (delta + 0.5) / 2**(bpsample-2) */
+  /* -> diff = stepsize * (delta * 2 + 1) / 2**(bpsample-1) */
   delta = nibble & absmask;
   qdiff = (stepsize * ((delta << 1) + 1)) >> (bpsample - 1);
   qdiff = (sign) ? -qdiff : qdiff; /* 符号ビットの反映 */
-#if 0
-  /* 3bit */
-  /* diff = stepsize * (delta + 0.5) / 2 */
-  /* -> diff = stepsize * (delta * 2 + 1) / 4 */
-  delta = nibble & 3;
-  qdiff = (stepsize * ((delta << 1) + 1)) >> 2;
-  qdiff = (nibble & 4) ? -qdiff : qdiff;
-  /* 2bit */
-  /* diff = stepsize * (delta + 0.5) */
-  /* -> diff = stepsize * (delta * 2 + 1) / 2 */
-  delta = nibble & 1;
-  qdiff = (stepsize * ((delta << 1) + 1)) >> 1;
-  qdiff = (nibble & 2) ? -qdiff : qdiff;
-#endif
 
   /* インデックス更新 */
   switch (bpsample) {
@@ -927,7 +907,7 @@ static AADApiResult AADEncoder_EncodeBlock(
           /* FIXME: smpl + 1 がオーバーランする可能性がある */
           code[0] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 0], 4);
           code[1] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 1], 4);
-          assert((code[0] <= AAD_MAX_CODE_VALUE) && (code[1] <= AAD_MAX_CODE_VALUE));
+          assert((code[0] <= 0xF) && (code[1] <= 0xF));
           ByteArray_PutUint8(data_pos, (code[0] << 4) | code[1]);
           // printf("%d %d %d \n", smpl, (uint32_t)(data_pos - data), (code[0] << 4) | code[1]);
           assert((uint32_t)(data_pos - data) <= data_size);
@@ -936,6 +916,26 @@ static AADApiResult AADEncoder_EncodeBlock(
       }
       break;
     case 2:
+      for (smpl = AAD_FILTER_ORDER; smpl < num_samples; smpl += 4) {
+        uint8_t code[4];
+        /* TODO: LR -> MS */
+        for (ch = 0; ch < header->num_channels; ch++) {
+          assert((uint32_t)(data_pos - data) < data_size);
+          assert((uint32_t)(data_pos - data) < header->block_size);
+          /* FIXME: smpl + 1 ... smpl + 3 がオーバーランする可能性がある */
+          code[0] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 0], 2);
+          code[1] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 1], 2);
+          code[2] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 2], 2);
+          code[3] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 3], 2);
+          assert((code[0] <= 0x3) && (code[1] <= 0x3)
+              && (code[2] <= 0x3) && (code[3] <= 0x3));
+          ByteArray_PutUint8(data_pos, (code[0] << 6) | (code[1] << 4) | (code[2] << 2) | ((code[3] << 0)));
+          // printf("%d %d %d \n", smpl, (uint32_t)(data_pos - data), (code[0] << 4) | code[1]);
+          assert((uint32_t)(data_pos - data) <= data_size);
+          assert((uint32_t)(data_pos - data) <= header->block_size);
+        }
+      }
+      break;
     case 3:
     default:
       return AAD_APIRESULT_INVALID_FORMAT;
