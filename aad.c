@@ -10,14 +10,15 @@
 #include <math.h>
 
 /* アラインメント */
-#define AAD_ALIGNMENT                 16
+#define AAD_ALIGNMENT             16
 
-#define AAD_FILTER_ORDER              4
-#define AAD_FIXEDPOINT_DIGITS         15
-#define AAD_FIXEDPOINT_0_5            (1 << (AAD_FIXEDPOINT_DIGITS - 1))
-#define AAD_LMSFILTER_MU              ((1 << AAD_FIXEDPOINT_DIGITS) >> 4)
-#define AAD_PREEMPHASIS_SHIFT         5
-#define AAD_PREEMPHASIS_NUMER         ((1 << AAD_PREEMPHASIS_SHIFT) - 1)
+#define AAD_FILTER_ORDER          4
+#define AAD_FIXEDPOINT_DIGITS     15
+#define AAD_FIXEDPOINT_0_5        (1 << (AAD_FIXEDPOINT_DIGITS - 1))
+#define AAD_PREEMPHASIS_SHIFT     5
+#define AAD_PREEMPHASIS_NUMER     ((1 << AAD_PREEMPHASIS_SHIFT) - 1)
+#define AAD_NOISE_SHAPING_SHIFT   2
+#define AAD_LMSFILTER_SHIFT       3
 
 /* 最大の符号化値 */
 #define AAD_MAX_CODE_VALUE            ((1 << AAD_MAX_BITS_PER_SAMPLE) - 1)
@@ -86,11 +87,11 @@ struct AADEncoder {
 
 /* 1サンプルデコード */
 static int32_t AADProcessor_DecodeSample(
-    struct AADProcessor *processor, uint8_t nibble);
+    struct AADProcessor *processor, uint8_t nibble, uint8_t bpsample);
 
 /* 1サンプルエンコード */
 static uint8_t AADProcessor_EncodeSample(
-    struct AADProcessor *processor, int32_t sample);
+    struct AADProcessor *processor, int32_t sample, uint8_t bpsample);
 
 /* 単一データブロックエンコード */
 static AADApiResult AADEncoder_EncodeBlock(
@@ -389,12 +390,16 @@ AADApiResult AADDecoder_DecodeHeader(
 
 /* 1サンプルデコード */
 static int32_t AADProcessor_DecodeSample(
-    struct AADProcessor *processor, uint8_t nibble)
+    struct AADProcessor *processor, uint8_t nibble, uint8_t bpsample)
 {
   int16_t idx;
   int32_t sample, qdiff, delta, predict, stepsize;
+  const uint8_t signbit = (1 << (bpsample - 1));
+  const uint8_t absmask = signbit - 1;
 
   assert(processor != NULL);
+  assert((bpsample >= 2) && (bpsample <= AAD_MAX_BITS_PER_SAMPLE));
+  assert(nibble <= AAD_MAX_CODE_VALUE);
 
   /* 頻繁に参照する変数をオート変数に受ける */
   idx = processor->stepsize_index;
@@ -405,9 +410,9 @@ static int32_t AADProcessor_DecodeSample(
   /* 差分算出 */
   /* diff = stepsize * (delta + 0.5) / 4 */
   /* -> diff = stepsize * (delta * 2 + 1) / 8 */
-  delta = nibble & 7;
-  qdiff = (stepsize * ((delta << 1) + 1)) >> 3;
-  qdiff = (nibble & 8) ? -qdiff : qdiff; /* 符号ビットの反映 */
+  delta = nibble & absmask;
+  qdiff = (stepsize * ((delta << 1) + 1)) >> (bpsample - 1);
+  qdiff = (nibble & signbit) ? -qdiff : qdiff; /* 符号ビットの反映 */
 #if 0
   /* 3bit */
   /* diff = stepsize * (delta + 0.5) / 2 */
@@ -437,11 +442,12 @@ static int32_t AADProcessor_DecodeSample(
   sample = AAD_INNER_VAL(sample, INT16_MIN, INT16_MAX);
 
   /* インデックス更新 */
-  idx += AAD_index_table_4bit[nibble];
-#if 0
-  idx += AAD_index_table_3bit[nibble];
-  idx += AAD_index_table_2bit[nibble];
-#endif
+  switch (bpsample) {
+    case 4: idx += AAD_index_table_4bit[nibble]; break;
+    case 3: idx += AAD_index_table_3bit[nibble]; break;
+    case 2: idx += AAD_index_table_2bit[nibble]; break;
+    default: assert(0);
+  }
   idx = AAD_INNER_VAL(idx, 0, (int16_t)((sizeof(AAD_stepsize_table) / sizeof(uint16_t)) - 1));
 
   /* 計算結果の反映 */
@@ -541,8 +547,8 @@ static AADApiResult AADDecoder_DecodeBlock(
           assert((uint32_t)(read_pos - data) < header->block_size);
           ByteArray_GetUint8(read_pos, &code);
           // printf("%d %d %d \n", smpl, (uint32_t)(read_pos - data), code);
-          buffer[ch][smpl + 0] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 4) & 0xF); 
-          buffer[ch][smpl + 1] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 0) & 0xF); 
+          buffer[ch][smpl + 0] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 4) & 0xF, 4); 
+          buffer[ch][smpl + 1] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 0) & 0xF, 4); 
           assert((uint32_t)(read_pos - data) <= data_size);
           assert((uint32_t)(read_pos - data) <= header->block_size);
           /* FIXME: smpl + 1 がバッファオーバーランする可能性がある */
@@ -751,14 +757,17 @@ void AADEncoder_Destroy(struct AADEncoder *encoder)
 
 /* 1サンプルエンコード */
 static uint8_t AADProcessor_EncodeSample(
-    struct AADProcessor *processor, int32_t sample)
+    struct AADProcessor *processor, int32_t sample, uint8_t bpsample)
 {
   uint8_t nibble;
   int16_t idx;
   int32_t predict, diff, qdiff, delta, stepsize, diffabs, sign;
   int32_t quantize_sample;
+  const uint8_t signbit = (1 << (bpsample - 1));
+  const uint8_t absmask = signbit - 1;
 
   assert(processor != NULL);
+  assert((bpsample >= 2) && (bpsample <= AAD_MAX_BITS_PER_SAMPLE));
   
   /* 頻繁に参照する変数をオート変数に受ける */
   idx = processor->stepsize_index;
@@ -776,13 +785,13 @@ static uint8_t AADProcessor_EncodeSample(
 
   /* 差分 */
   diff = sample - predict;
-  diff -= (processor->quantize_error >> 2); /* 量子化誤差をフィードバック（ノイズシェーピング） */
+  diff -= (processor->quantize_error >> AAD_NOISE_SHAPING_SHIFT); /* 量子化誤差をフィードバック（ノイズシェーピング） */
   sign = diff < 0;
   diffabs = sign ? -diff : diff;
 
   /* 差分を符号表現に変換 */
   /* nibble = sign(diff) * round(|diff| * 4 / stepsize) */
-  nibble = (uint8_t)AAD_MIN_VAL((diffabs << 2) / stepsize, 7);
+  nibble = (uint8_t)AAD_MIN_VAL((diffabs << (bpsample - 2)) / stepsize, absmask);
 #if 0
   /* 3bit */
   nibble = (uint8_t)AAD_MIN_VAL((diffabs << 1) / stepsize, 3);
@@ -791,7 +800,7 @@ static uint8_t AADProcessor_EncodeSample(
 #endif
   /* nibbleの最上位ビットは符号ビット */
   if (sign) {
-    nibble |= 0x8;  /* 4bit */
+    nibble |= signbit;  /* 4bit */
 #if 0
     nibble |= 0x4; /* 3bit */
     nibble |= 0x2; /* 2bit */
@@ -801,9 +810,9 @@ static uint8_t AADProcessor_EncodeSample(
   /* 量子化した差分を計算 */
   /* diff = stepsize * (delta + 0.5) / 4 */
   /* -> diff = stepsize * (delta * 2 + 1) / 8 */
-  delta = nibble & 7;
-  qdiff = (stepsize * ((delta << 1) + 1)) >> 3;
-  qdiff = (nibble & 8) ? -qdiff : qdiff; /* 符号ビットの反映 */
+  delta = nibble & absmask;
+  qdiff = (stepsize * ((delta << 1) + 1)) >> (bpsample - 1);
+  qdiff = (sign) ? -qdiff : qdiff; /* 符号ビットの反映 */
 #if 0
   /* 3bit */
   /* diff = stepsize * (delta + 0.5) / 2 */
@@ -820,11 +829,12 @@ static uint8_t AADProcessor_EncodeSample(
 #endif
 
   /* インデックス更新 */
-  idx += AAD_index_table_4bit[nibble];
-#if 0
-  idx += AAD_index_table_3bit[nibble];
-  idx += AAD_index_table_2bit[nibble];
-#endif
+  switch (bpsample) {
+    case 4: idx += AAD_index_table_4bit[nibble]; break;
+    case 3: idx += AAD_index_table_3bit[nibble]; break;
+    case 2: idx += AAD_index_table_2bit[nibble]; break;
+    default: assert(0);
+  }
   idx = AAD_INNER_VAL(idx, 0, (int16_t)((sizeof(AAD_stepsize_table) / sizeof(uint16_t)) - 1));
 
   /* 計算結果の反映 */
@@ -839,10 +849,10 @@ static uint8_t AADProcessor_EncodeSample(
   processor->quantize_error = diff - qdiff;
 
   /* フィルタ係数更新 */
-  processor->weight[3] += (qdiff * processor->history[3] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + 3);
-  processor->weight[2] += (qdiff * processor->history[2] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + 3);
-  processor->weight[1] += (qdiff * processor->history[1] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + 3);
-  processor->weight[0] += (qdiff * processor->history[0] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + 3);
+  processor->weight[3] += (qdiff * processor->history[3] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
+  processor->weight[2] += (qdiff * processor->history[2] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
+  processor->weight[1] += (qdiff * processor->history[1] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
+  processor->weight[0] += (qdiff * processor->history[0] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
 
   /* 入力データ履歴更新 */
   processor->history[3] = processor->history[2];
@@ -915,8 +925,8 @@ static AADApiResult AADEncoder_EncodeBlock(
           assert((uint32_t)(data_pos - data) < data_size);
           assert((uint32_t)(data_pos - data) < header->block_size);
           /* FIXME: smpl + 1 がオーバーランする可能性がある */
-          code[0] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 0]); 
-          code[1] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 1]); 
+          code[0] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 0], 4);
+          code[1] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 1], 4);
           assert((code[0] <= AAD_MAX_CODE_VALUE) && (code[1] <= AAD_MAX_CODE_VALUE));
           ByteArray_PutUint8(data_pos, (code[0] << 4) | code[1]);
           // printf("%d %d %d \n", smpl, (uint32_t)(data_pos - data), (code[0] << 4) | code[1]);
