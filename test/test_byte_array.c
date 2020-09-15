@@ -6,22 +6,22 @@
 #include "../byte_array.h"
 
 /* テストのセットアップ関数 */
-void testByteArray_Setup(void);
+void ByteArrayTest_Setup(void);
 
-static int testByteArray_Initialize(void *obj)
+static int ByteArrayTest_Initialize(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
   return 0;
 }
 
-static int testByteArray_Finalize(void *obj)
+static int ByteArrayTest_Finalize(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
   return 0;
 }
 
 /* 読み書きテスト */
-static void testByteArray_ReadWriteTest(void *obj)
+static void ByteArrayTest_ReadWriteTest(void *obj)
 {
 #define TEST_SIZE (256 * 256)
   TEST_UNUSED_PARAMETER(obj);
@@ -188,11 +188,11 @@ static void testByteArray_ReadWriteTest(void *obj)
 #undef TEST_SIZE
 }
 
-void testByteArray_Setup(void)
+void ByteArrayTest_Setup(void)
 {
   struct TestSuite *suite
     = Test_AddTestSuite("Byte Array Test Suite",
-        NULL, testByteArray_Initialize, testByteArray_Finalize);
+        NULL, ByteArrayTest_Initialize, ByteArrayTest_Finalize);
 
-  Test_AddTest(suite, testByteArray_ReadWriteTest);
+  Test_AddTest(suite, ByteArrayTest_ReadWriteTest);
 }

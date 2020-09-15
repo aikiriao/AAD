@@ -1,8 +1,8 @@
 #include "test.h"
 
 /* 各テストスイートのセットアップ関数宣言 */
-void testByteArray_Setup(void);
-void testAAD_Setup(void);
+void ByteArrayTest_Setup(void);
+void AADTest_Setup(void);
 
 /* テスト実行 */
 int main(int argc, char **argv)
@@ -14,8 +14,8 @@ int main(int argc, char **argv)
 
   Test_Initialize();
 
-  testByteArray_Setup();
-  testAAD_Setup();
+  ByteArrayTest_Setup();
+  AADTest_Setup();
 
   ret = Test_RunAllTestSuite();
 

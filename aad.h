@@ -3,11 +3,18 @@
 
 #include <stdint.h>
 
+
+/* フォーマットバージョン */
+#define AAD_FORMAT_VERSION          1
+
 /* 処理可能な最大チャンネル数 */
 #define AAD_MAX_NUM_CHANNELS        2
 
 /* 最大のサンプルあたりビット数 */
 #define AAD_MAX_BITS_PER_SAMPLE     4
+
+/* ヘッダサイズ[byte] */
+#define AAD_HEADER_SIZE             26
 
 /* API結果型 */
 typedef enum AADApiResultTag {
@@ -23,13 +30,11 @@ typedef enum AADApiResultTag {
 /* ヘッダ情報 */
 struct AADHeaderInfo {
   uint16_t num_channels;          /* チャンネル数                                 */
-  uint32_t sampling_rate;         /* サンプリングレート                           */
-  uint32_t bytes_per_sec;         /* データ速度[byte/sec]                         */
-  uint16_t block_size;            /* ブロックサイズ                               */
-  uint16_t bits_per_sample;       /* サンプルあたりビット数                       */
-  uint16_t num_samples_per_block; /* ブロックあたりサンプル数                     */
   uint32_t num_samples;           /* 1チャンネルあたり総サンプル数                */
-  uint32_t header_size;           /* ファイル先頭からdata領域先頭までのオフセット */
+  uint32_t sampling_rate;         /* サンプリングレート                           */
+  uint16_t bits_per_sample;       /* サンプルあたりビット数                       */
+  uint16_t block_size;            /* ブロックサイズ                               */
+  uint32_t num_samples_per_block; /* ブロックあたりサンプル数                     */
 };
 
 /* エンコードパラメータ */
@@ -37,7 +42,7 @@ struct AADEncodeParameter {
   uint16_t num_channels;          /* チャンネル数                                 */
   uint32_t sampling_rate;         /* サンプリングレート                           */
   uint16_t bits_per_sample;       /* サンプルあたりビット数（今の所4で固定）      */
-  uint16_t block_size;            /* ブロックサイズ[byte]                         */
+  uint16_t max_block_size;        /* 最大ブロックサイズ[byte]                     */
 };
 
 /* デコーダハンドル */
@@ -49,6 +54,11 @@ struct AADEncoder;
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
+
+/* ブロックサイズとブロックあたりサンプル数の計算 */
+AADApiResult AADEncoder_CalculateBlockSize(
+    uint32_t max_block_size, uint16_t num_channels, uint32_t bits_per_sample,
+    uint16_t *block_size, uint32_t *num_samples_per_block);
 
 /* ヘッダデコード */
 AADApiResult AADDecoder_DecodeHeader(

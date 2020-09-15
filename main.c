@@ -145,7 +145,7 @@ static int do_encode(const char *wav_file, const char *encoded_filename)
   enc_param.num_channels    = (uint16_t)num_channels;
   enc_param.sampling_rate   = wavfile->format.sampling_rate;
   enc_param.bits_per_sample = 4;
-  enc_param.block_size      = AADCUI_BLOCK_SIZE;
+  enc_param.max_block_size  = AADCUI_BLOCK_SIZE;
   if ((api_result = AADEncoder_SetEncodeParameter(encoder, &enc_param))
       != AAD_APIRESULT_OK) {
     fprintf(stderr, "Failed to set encode parameter. API result:%d \n", api_result);
@@ -231,7 +231,7 @@ static int do_residual_output(const char *wav_file, const char *residual_filenam
   enc_param.num_channels    = (uint16_t)num_channels;
   enc_param.sampling_rate   = wavfile->format.sampling_rate;
   enc_param.bits_per_sample = 4;
-  enc_param.block_size      = AADCUI_BLOCK_SIZE;
+  enc_param.max_block_size  = AADCUI_BLOCK_SIZE;
   if ((api_result = AADEncoder_SetEncodeParameter(encoder, &enc_param))
       != AAD_APIRESULT_OK) {
     fprintf(stderr, "Failed to set encode parameter. API result:%d \n", api_result);

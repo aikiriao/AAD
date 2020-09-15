@@ -13,22 +13,81 @@
 #include "../wav.c"
 
 /* テストのセットアップ関数 */
-void testAAD_Setup(void);
+void AADTest_Setup(void);
 
-static int testByteArray_Initialize(void *obj)
+static int AADTest_Initialize(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
   return 0;
 }
 
-static int testByteArray_Finalize(void *obj)
+static int AADTest_Finalize(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
   return 0;
+}
+
+/* ブロックサイズ計算テスト */
+static void AADTest_CalculateBlockSizeTest(void *obj)
+{
+  TEST_UNUSED_PARAMETER(obj);
+
+  /* 計算値チェック */
+  {
+    uint16_t block_size;
+    uint32_t num_samples_per_block;
+
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(32, 1, 4, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size, 32); Test_AssertEqual(num_samples_per_block, 32);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(64, 2, 4, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size, 64); Test_AssertEqual(num_samples_per_block, 32);
+
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(  64, 1, 3, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size,   63); Test_AssertEqual(num_samples_per_block,  124);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(  64, 2, 3, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size,   63); Test_AssertEqual(num_samples_per_block,   40);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize( 128, 1, 3, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size,  126); Test_AssertEqual(num_samples_per_block,  292);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize( 128, 2, 3, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size,  126); Test_AssertEqual(num_samples_per_block,  124);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(1024, 1, 3, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size, 1023); Test_AssertEqual(num_samples_per_block, 2684);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(1024, 2, 3, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size, 1023); Test_AssertEqual(num_samples_per_block, 1320);
+
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(32, 1, 2, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size, 32); Test_AssertEqual(num_samples_per_block,  60);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(64, 1, 2, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size, 64); Test_AssertEqual(num_samples_per_block, 188);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(64, 2, 2, &block_size, &num_samples_per_block), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size, 64); Test_AssertEqual(num_samples_per_block,  60);
+
+    /* サンプル数はNULLでも良しとしている */
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(32, 1, 4, &block_size, NULL), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size, 32); 
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(64, 2, 4, &block_size, NULL), AAD_APIRESULT_OK);
+    Test_AssertEqual(block_size, 64);
+  }
+
+  /* 失敗例 */
+  {
+    uint16_t block_size;
+    uint32_t num_samples_per_block;
+
+    /* 引数が不正 */
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(32, 1, 4, NULL, NULL), AAD_APIRESULT_INVALID_ARGUMENT);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(32, 1, 4, NULL, &num_samples_per_block), AAD_APIRESULT_INVALID_ARGUMENT);
+    /* フォーマットが不正 */
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(AAD_BLOCK_HEADER_SIZE(1) - 1, 1, 4, &block_size, &num_samples_per_block), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(32, 0, 4, &block_size, &num_samples_per_block), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(32, AAD_MAX_NUM_CHANNELS + 1, 4, &block_size, &num_samples_per_block), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(32, 1, 0, &block_size, &num_samples_per_block), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(32, 1, AAD_MAX_BITS_PER_SAMPLE + 1, &block_size, &num_samples_per_block), AAD_APIRESULT_INVALID_FORMAT);
+  }
 }
 
 /* ヘッダエンコードデコードテスト */
-static void testAAD_HeaderEncodeDecodeTest(void *obj)
+static void AADTest_HeaderEncodeDecodeTest(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
 
@@ -37,17 +96,15 @@ static void testAAD_HeaderEncodeDecodeTest(void *obj)
   struct AADHeaderInfo *header__p = p_header;                   \
   header__p->num_channels           = 1;                        \
   header__p->sampling_rate          = 44100;                    \
-  header__p->bytes_per_sec          = 89422;                    \
-  header__p->block_size             = 256;                      \
+  header__p->block_size             = 32;                       \
   header__p->bits_per_sample        = AAD_MAX_BITS_PER_SAMPLE;  \
-  header__p->num_samples_per_block  = 505;                      \
   header__p->num_samples            = 1024;                     \
-  header__p->header_size            = AADENCODER_HEADER_SIZE;   \
+  header__p->num_samples_per_block  = 32;                       \
 }
 
   /* 成功例 */
   {
-    uint8_t data[AADENCODER_HEADER_SIZE] = { 0, };
+    uint8_t data[AAD_HEADER_SIZE] = { 0, };
     struct AADHeaderInfo header = { 0, }, tmp_header = { 0, };
 
     AAD_SetValidHeader(&header);
@@ -59,18 +116,16 @@ static void testAAD_HeaderEncodeDecodeTest(void *obj)
     /* デコードしたヘッダの一致確認 */
     Test_AssertEqual(header.num_channels,           tmp_header.num_channels);
     Test_AssertEqual(header.sampling_rate,          tmp_header.sampling_rate);
-    Test_AssertEqual(header.bytes_per_sec,          tmp_header.bytes_per_sec);
     Test_AssertEqual(header.block_size,             tmp_header.block_size);
     Test_AssertEqual(header.bits_per_sample,        tmp_header.bits_per_sample);
-    Test_AssertEqual(header.num_samples_per_block,  tmp_header.num_samples_per_block);
     Test_AssertEqual(header.num_samples,            tmp_header.num_samples);
-    Test_AssertEqual(header.header_size,            tmp_header.header_size);
+    Test_AssertEqual(header.num_samples_per_block,  tmp_header.num_samples_per_block);
   }
 
   /* ヘッダエンコード失敗ケース */
   {
     struct AADHeaderInfo header;
-    uint8_t data[AADENCODER_HEADER_SIZE] = { 0, };
+    uint8_t data[AAD_HEADER_SIZE] = { 0, };
 
     /* 引数が不正 */
     AAD_SetValidHeader(&header);
@@ -80,82 +135,109 @@ static void testAAD_HeaderEncodeDecodeTest(void *obj)
     /* データサイズ不足 */
     AAD_SetValidHeader(&header);
     Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data) - 1), AAD_APIRESULT_INSUFFICIENT_DATA);
-    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, AADENCODER_HEADER_SIZE - 1), AAD_APIRESULT_INSUFFICIENT_DATA);
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, AAD_HEADER_SIZE - 1), AAD_APIRESULT_INSUFFICIENT_DATA);
 
-    /* チャンネル数異常 */
+    /* 異常なチャンネル数 */
     AAD_SetValidHeader(&header);
-    header.num_channels = 3;
+    header.num_channels = 0;
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
+    AAD_SetValidHeader(&header);
+    header.num_channels = AAD_MAX_NUM_CHANNELS + 1;
     Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
 
-    /* ビット深度異常（0） */
+    /* 異常なサンプル数 */
+    AAD_SetValidHeader(&header);
+    header.num_samples = 0;
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
+
+    /* 異常なサンプリングレート */
+    AAD_SetValidHeader(&header);
+    header.sampling_rate = 0;
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
+
+    /* 異常なビット深度 */
     AAD_SetValidHeader(&header);
     header.bits_per_sample = 0;
     Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
-
-    /* ビット深度異常（大きい） */
     AAD_SetValidHeader(&header);
     header.bits_per_sample = AAD_MAX_BITS_PER_SAMPLE + 1;
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
+
+    /* 異常なブロックサイズ */
+    AAD_SetValidHeader(&header);
+    header.block_size = 0;
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
+    AAD_SetValidHeader(&header);
+    header.block_size = AAD_BLOCK_HEADER_SIZE(header.num_channels) - 1;
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
+
+    /* 異常なブロックあたりサンプル数 */
+    AAD_SetValidHeader(&header);
+    header.num_samples_per_block = 0;
     Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
   }
 
   /* ヘッダデコード失敗ケース */
   {
     struct AADHeaderInfo header, getheader;
-    uint8_t valid_data[AADENCODER_HEADER_SIZE] = { 0, };
-    uint8_t data[AADENCODER_HEADER_SIZE];
+    uint8_t valid_data[AAD_HEADER_SIZE] = { 0, };
+    uint8_t data[AAD_HEADER_SIZE];
 
     /* 有効な内容を作っておく */
     AAD_SetValidHeader(&header);
     AADEncoder_EncodeHeader(&header, valid_data, sizeof(valid_data));
 
-    /* チャンクIDが不正 */
-    /* RIFFの破壊 */
+    /* シグネチャが不正 */
     memcpy(data, valid_data, sizeof(valid_data));
-    data[0] = 'a';
+    ByteArray_WriteUint8(&data[0], 'a');
     Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
-    /* WAVEの破壊 */
-    memcpy(data, valid_data, sizeof(valid_data));
-    data[8] = 'a';
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
-    /* FMTの破壊 */
-    memcpy(data, valid_data, sizeof(valid_data));
-    data[12] = 'a';
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
-    /* factの破壊はスキップ: factチャンクはオプショナルだから
-    memcpy(data, valid_data, sizeof(valid_data));
-    data[40] = 'a';
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
-    */
-    /* dataの破壊: dataチャンクが見つけられない */
-    memcpy(data, valid_data, sizeof(valid_data));
-    data[52] = 'a';
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INSUFFICIENT_DATA);
 
-    /* クソデカfmtチャンクサイズ */
+    /* 異常なフォーマットバージョン */
     memcpy(data, valid_data, sizeof(valid_data));
-    ByteArray_WriteUint32LE(&data[16], sizeof(data));
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INSUFFICIENT_DATA);
-    /* 異常なWAVEフォーマットタイプ */
-    memcpy(data, valid_data, sizeof(valid_data));
-    ByteArray_WriteUint32LE(&data[20], 0);
+    ByteArray_WriteUint32BE(&data[4], 0);
     Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    memcpy(data, valid_data, sizeof(valid_data));
+    ByteArray_WriteUint32BE(&data[4], AAD_FORMAT_VERSION + 1);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+
     /* 異常なチャンネル数 */
     memcpy(data, valid_data, sizeof(valid_data));
-    ByteArray_WriteUint32LE(&data[22], AAD_MAX_NUM_CHANNELS + 1);
+    ByteArray_WriteUint16BE(&data[8], 0);
     Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
-    /* 異常なfmtチャンクのエキストラサイズ */
     memcpy(data, valid_data, sizeof(valid_data));
-    ByteArray_WriteUint32LE(&data[36], 0);
+    ByteArray_WriteUint16BE(&data[8], AAD_MAX_NUM_CHANNELS + 1);
     Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
-    /* 異常なFACTチャンクサイズ */
+
+    /* 異常なサンプル数 */
     memcpy(data, valid_data, sizeof(valid_data));
-    ByteArray_WriteUint32LE(&data[44], 0);
+    ByteArray_WriteUint32BE(&data[10], 0);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+
+    /* 異常なサンプリングレート */
+    memcpy(data, valid_data, sizeof(valid_data));
+    ByteArray_WriteUint32BE(&data[14], 0);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+
+    /* 異常なサンプルあたりビット数 */
+    memcpy(data, valid_data, sizeof(valid_data));
+    ByteArray_WriteUint16BE(&data[18], 0);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    memcpy(data, valid_data, sizeof(valid_data));
+    ByteArray_WriteUint16BE(&data[18], AAD_MAX_BITS_PER_SAMPLE + 1);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+
+    /* 異常なブロックサイズ */
+    memcpy(data, valid_data, sizeof(valid_data));
+    ByteArray_WriteUint16BE(&data[20], 0);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    memcpy(data, valid_data, sizeof(valid_data));
+    ByteArray_WriteUint16BE(&data[20], AAD_BLOCK_HEADER_SIZE(header.num_channels) - 1);
     Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
   }
 }
 
 /* デコードハンドル作成破棄テスト */
-static void testAADDecoder_CreateDestroyTest(void *obj)
+static void AADDecoderTest_CreateDestroyTest(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
 
@@ -178,7 +260,8 @@ static void testAADDecoder_CreateDestroyTest(void *obj)
 
     decoder = AADDecoder_Create(work, work_size);
     Test_AssertCondition(decoder != NULL);
-    Test_AssertCondition(decoder->work == NULL);
+    Test_AssertCondition(decoder->work == work);
+    Test_AssertCondition(decoder->alloced_by_own != 1);
 
     AADDecoder_Destroy(decoder);
     free(work);
@@ -191,6 +274,7 @@ static void testAADDecoder_CreateDestroyTest(void *obj)
     decoder = AADDecoder_Create(NULL, 0);
     Test_AssertCondition(decoder != NULL);
     Test_AssertCondition(decoder->work != NULL);
+    Test_AssertCondition(decoder->alloced_by_own == 1);
 
     AADDecoder_Destroy(decoder);
   }
@@ -219,7 +303,7 @@ static void testAADDecoder_CreateDestroyTest(void *obj)
 }
 
 /* デコード結果が一致するか確認するサブルーチン 一致していたら1, していなければ0を返す */
-static uint8_t testAADDecoder_CheckDecodeResult(const char *adpcm_filename, const char *decodedwav_filename)
+static uint8_t AADDecoderTest_CheckDecodeResult(const char *adpcm_filename, const char *decodedwav_filename)
 {
   FILE        *fp;
   uint8_t     *data;
@@ -285,99 +369,30 @@ CHECK_END:
 }
 
 /* デコードテスト */
-static void testAADDecoder_DecodeTest(void *obj)
+static void AADDecoderTest_DecodeTest(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
 
 #if 0
-  /* 実データのヘッダデコード */
-  {
-    const char  test_filename[] = "sin300Hz_mono_adpcm_ffmpeg.wav";
-    FILE        *fp;
-    uint8_t     *data;
-    struct stat fstat;
-    uint32_t    data_size;
-    struct AADHeaderInfo header;
-
-    /* データロード */
-    fp = fopen(test_filename, "rb");
-    assert(fp != NULL);
-    stat(test_filename, &fstat);
-    data_size = (uint32_t)fstat.st_size;
-    data = (uint8_t *)malloc(data_size);
-    fread(data, sizeof(uint8_t), data_size, fp);
-    fclose(fp);
-
-    /* ヘッダデコード */
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, data_size, &header), AAD_APIRESULT_OK);
-
-    /* 想定した内容になっているか */
-    Test_AssertEqual(header.num_channels,           1    );
-    Test_AssertEqual(header.sampling_rate,          48000);
-    Test_AssertEqual(header.bytes_per_sec,          16000);
-    Test_AssertEqual(header.block_size,             1024 );
-    Test_AssertEqual(header.num_samples_per_block,  2041 );
-    Test_AssertEqual(header.num_samples,            24492);
-    Test_AssertEqual(header.header_size,            94   );
-
-    free(data);
-  }
-
-  /* 実データのヘッダデコード（factチャンクがないwav） */
-  {
-    const char  test_filename[] = "bunny1im.wav";
-    FILE        *fp;
-    uint8_t     *data;
-    struct stat fstat;
-    uint32_t    data_size;
-    struct AADHeaderInfo header;
-
-    /* データロード */
-    fp = fopen(test_filename, "rb");
-    assert(fp != NULL);
-    stat(test_filename, &fstat);
-    data_size = (uint32_t)fstat.st_size;
-    data = (uint8_t *)malloc(data_size);
-    fread(data, sizeof(uint8_t), data_size, fp);
-    fclose(fp);
-
-    /* ヘッダデコード */
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, data_size, &header), AAD_APIRESULT_OK);
-
-    /* 想定した内容になっているか */
-    Test_AssertEqual(header.num_channels,           1     );
-    Test_AssertEqual(header.sampling_rate,          8000  );
-    Test_AssertEqual(header.bytes_per_sec,          4064  );
-    Test_AssertEqual(header.block_size,             256   );
-    Test_AssertEqual(header.num_samples_per_block,  505   );
-    Test_AssertEqual(header.num_samples,            187860);
-    Test_AssertEqual(header.header_size,            48    );
-
-    free(data);
-  }
-#endif
-
-  /* 実データのデータデコード一致確認 */
-#if 0
   {
     Test_AssertEqual(
-        testAADDecoder_CheckDecodeResult(
+        AADDecoderTest_CheckDecodeResult(
           "sin300Hz_mono_adpcm_ffmpeg.wav", "sin300Hz_mono_adpcm_ffmpeg_decoded.wav"), 1);
     Test_AssertEqual(
-        testAADDecoder_CheckDecodeResult(
+        AADDecoderTest_CheckDecodeResult(
           "sin300Hz_adpcm_ffmpeg.wav", "sin300Hz_adpcm_ffmpeg_decoded.wav"), 1);
     Test_AssertEqual(
-        testAADDecoder_CheckDecodeResult(
+        AADDecoderTest_CheckDecodeResult(
           "unit_impulse_mono_adpcm_ffmpeg.wav", "unit_impulse_mono_adpcm_ffmpeg_decoded.wav"), 1);
     Test_AssertEqual(
-        testAADDecoder_CheckDecodeResult(
+        AADDecoderTest_CheckDecodeResult(
           "unit_impulse_adpcm_ffmpeg.wav", "unit_impulse_adpcm_ffmpeg_decoded.wav"), 1);
   }
 #endif
 }
 
 /* エンコードハンドル作成破棄テスト */
-static void testAADEncoder_CreateDestroyTest(void *obj)
+static void AADEncoderTest_CreateDestroyTest(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
 
@@ -400,8 +415,9 @@ static void testAADEncoder_CreateDestroyTest(void *obj)
 
     encoder = AADEncoder_Create(work, work_size);
     Test_AssertCondition(encoder != NULL);
-    Test_AssertCondition(encoder->work == NULL);
+    Test_AssertCondition(encoder->work == work);
     Test_AssertCondition(encoder->set_parameter == 0);
+    Test_AssertCondition(encoder->alloced_by_own != 1);
 
     AADEncoder_Destroy(encoder);
     free(work);
@@ -414,6 +430,7 @@ static void testAADEncoder_CreateDestroyTest(void *obj)
     encoder = AADEncoder_Create(NULL, 0);
     Test_AssertCondition(encoder != NULL);
     Test_AssertCondition(encoder->work != NULL);
+    Test_AssertCondition(encoder->alloced_by_own == 1);
 
     AADEncoder_Destroy(encoder);
   }
@@ -442,30 +459,33 @@ static void testAADEncoder_CreateDestroyTest(void *obj)
 }
 
 /* エンコードパラメータ設定テスト */
-static void testAADEncoder_SetEncodeParameterTest(void *obj)
+static void AADEncoderTest_SetEncodeParameterTest(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
 
   /* 有効なパラメータをセット */
-#define AAD_SetValidParameter(p_param) {                  \
-    struct AADEncodeParameter *p__param = p_param;        \
-    p__param->num_channels    = 1;                        \
-    p__param->sampling_rate   = 8000;                     \
-    p__param->bits_per_sample = AAD_MAX_BITS_PER_SAMPLE;  \
-    p__param->block_size      = 256;                      \
+#define AAD_SetValidParameter(p_param) {            \
+    struct AADEncodeParameter *p__param = p_param;  \
+    p__param->num_channels    = 1;                  \
+    p__param->sampling_rate   = 8000;               \
+    p__param->bits_per_sample = 4;                  \
+    p__param->max_block_size  = 256;                \
 }
 
   /* 成功例 */
   {
     struct AADEncoder *encoder;
     struct AADEncodeParameter param;
+    struct AADHeaderInfo header;
 
     encoder = AADEncoder_Create(NULL, 0);
     
     AAD_SetValidParameter(&param);
+    Test_AssertEqual(AADEncoder_ConvertParameterToHeader(&param, 0, &header), AAD_APIRESULT_OK);
+
     Test_AssertEqual(AADEncoder_SetEncodeParameter(encoder, &param), AAD_APIRESULT_OK);
     Test_AssertEqual(encoder->set_parameter, 1);
-    Test_AssertEqual(memcmp(&(encoder->encode_paramemter), &param, sizeof(struct AADEncodeParameter)), 0);
+    Test_AssertEqual(memcmp(&(encoder->header), &header, sizeof(struct AADHeaderInfo)), 0);
 
     AADEncoder_Destroy(encoder);
   }
@@ -486,21 +506,119 @@ static void testAADEncoder_SetEncodeParameterTest(void *obj)
     AAD_SetValidParameter(&param);
     param.bits_per_sample = 0;
     Test_AssertEqual(AADEncoder_SetEncodeParameter(encoder, &param), AAD_APIRESULT_INVALID_FORMAT);
+    AAD_SetValidParameter(&param);
+    param.bits_per_sample = AAD_MAX_BITS_PER_SAMPLE + 1;
+    Test_AssertEqual(AADEncoder_SetEncodeParameter(encoder, &param), AAD_APIRESULT_INVALID_FORMAT);
 
     /* ブロックサイズが小さすぎる */
     AAD_SetValidParameter(&param);
-    param.block_size = 0;
+    param.max_block_size = 0;
     Test_AssertEqual(AADEncoder_SetEncodeParameter(encoder, &param), AAD_APIRESULT_INVALID_FORMAT);
     AAD_SetValidParameter(&param);
-    param.block_size = param.num_channels * 4;
+    param.max_block_size = AAD_BLOCK_HEADER_SIZE(param.num_channels);
     Test_AssertEqual(AADEncoder_SetEncodeParameter(encoder, &param), AAD_APIRESULT_INVALID_FORMAT);
 
     AADEncoder_Destroy(encoder);
   }
 }
 
-/* エンコード→デコードテスト 成功時は1, 失敗時は0を返す */
-static uint8_t testAADEncoder_EncodeDecodeTest(
+/* エンコードテスト */
+static void AADDecoderTest_EncodeTest(void *obj)
+{
+  TEST_UNUSED_PARAMETER(obj);
+
+  /* 簡単なデータをエンコード→デコードしてみる */
+  {
+#define NUM_CHANNELS    1
+#define NUM_SAMPLES     2048
+#define BIT_PER_SAMPLE  4
+    int32_t *input[AAD_MAX_NUM_CHANNELS];
+    int32_t *decoded[AAD_MAX_NUM_CHANNELS];
+    uint32_t ch, smpl, buffer_size, output_size;
+    uint16_t block_size;
+    uint8_t *buffer;
+    double rms_error;
+    struct AADEncodeParameter enc_param;
+    struct AADEncoder *encoder;
+    struct AADDecoder *decoder;
+
+    /* 出力データの領域割当て */
+    for (ch = 0; ch < NUM_CHANNELS; ch++) {
+      input[ch] = malloc(sizeof(int32_t) * NUM_SAMPLES);
+      decoded[ch] = malloc(sizeof(int32_t) * NUM_SAMPLES);
+    }
+    /* 入力wavと同じサイズの出力領域を確保（増えることはないと期待） */
+    buffer_size = NUM_CHANNELS * NUM_SAMPLES * sizeof(int32_t);
+    buffer = malloc(buffer_size);
+
+    /* データ作成: 正弦波 */
+    for (ch = 0; ch < NUM_CHANNELS; ch++) {
+      for (smpl = 0; smpl < NUM_SAMPLES; smpl++) {
+        input[ch][smpl] = INT16_MAX * 0.5 * sin((2.0 * 3.1415 * 440.0 * smpl) / 48000.0);
+        decoded[ch][smpl] = 0;
+      }
+    }
+
+    /* ハンドル作成 */
+    encoder = AADEncoder_Create(NULL, 0);
+    decoder = AADDecoder_Create(NULL, 0);
+    
+    /* ブロックサイズを計算 */
+    Test_AssertEqual(AADEncoder_CalculateBlockSize(256, NUM_CHANNELS, BIT_PER_SAMPLE, &block_size, NULL), AAD_APIRESULT_OK);
+
+    /* エンコードパラメータをセット */
+    enc_param.num_channels    = NUM_CHANNELS;
+    enc_param.sampling_rate   = 8000;
+    enc_param.bits_per_sample = BIT_PER_SAMPLE;
+    enc_param.max_block_size  = block_size;
+    Test_AssertEqual(AADEncoder_SetEncodeParameter(encoder, &enc_param), AAD_APIRESULT_OK);
+
+    /* エンコード */
+    Test_AssertEqual(
+        AADEncoder_EncodeWhole(
+          encoder, (const int32_t *const *)input, NUM_SAMPLES,
+          buffer, buffer_size, &output_size), AAD_APIRESULT_OK);
+    /* 半分以下にはなるはず */
+    Test_AssertCondition(output_size < (buffer_size / 2));
+
+    /* デコード */
+    Test_AssertEqual(
+        AADDecoder_DecodeWhole(
+          decoder, buffer, output_size,
+          decoded, NUM_CHANNELS, NUM_SAMPLES), AAD_APIRESULT_OK);
+
+    /* ロスがあるのでRMSE基準でチェック */
+    rms_error = 0.0;
+    for (ch = 0; ch < NUM_CHANNELS; ch++) {
+      for (smpl = 0; smpl < NUM_SAMPLES; smpl++) {
+        double pcm1, pcm2, abs_error;
+        pcm1 = (double)input[ch][smpl] / INT16_MAX;
+        pcm2 = (double)decoded[ch][smpl] / INT16_MAX;
+        abs_error = fabs(pcm1 - pcm2);
+        rms_error += abs_error * abs_error;
+      }
+    }
+    rms_error = sqrt(rms_error / (NUM_SAMPLES * NUM_CHANNELS));
+
+    /* 経験的に0.05 */
+    Test_AssertCondition(rms_error < 5.0e-2);
+
+    /* 領域開放 */
+    AADEncoder_Destroy(encoder);
+    AADDecoder_Destroy(decoder);
+    free(buffer);
+    for (ch = 0; ch < NUM_CHANNELS; ch++) {
+      free(input[ch]);
+      free(decoded[ch]);
+    }
+#undef NUM_CHANNELS
+#undef NUM_SAMPLES
+  }
+
+}
+
+/* エンコード→デコードチェックルーチン 成功時は1, 失敗時は0を返す */
+static uint8_t AADTest_EncodeDecodeCheck(
     const char *wav_filename, uint16_t bits_per_sample, uint16_t block_size, double rms_epsilon)
 {
   struct WAVFile *wavfile;
@@ -549,7 +667,7 @@ static uint8_t testAADEncoder_EncodeDecodeTest(
   enc_param.num_channels    = num_channels;
   enc_param.sampling_rate   = wavfile->format.sampling_rate;
   enc_param.bits_per_sample = bits_per_sample;
-  enc_param.block_size      = block_size;
+  enc_param.max_block_size  = block_size;
   if (AADEncoder_SetEncodeParameter(encoder, &enc_param) != AAD_APIRESULT_OK) {
     is_ok = 0;
     goto CHECK_END;
@@ -609,125 +727,43 @@ CHECK_END:
   return is_ok;
 }
 
-/* エンコードテスト */
-static void testAADDecoder_EncodeTest(void *obj)
+/* エンコードデコードテスト */
+static void AADTest_EncodeDecodeTest(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
 
-  /* 簡単なデータをエンコード→デコードしてみる */
   {
-#define NUM_CHANNELS  1
-#define NUM_SAMPLES   2048
-    int32_t *input[AAD_MAX_NUM_CHANNELS];
-    int32_t *decoded[AAD_MAX_NUM_CHANNELS];
-    uint32_t ch, smpl, buffer_size, output_size;
-    uint8_t *buffer;
-    double rms_error;
-    struct AADEncodeParameter enc_param;
-    struct AADEncoder *encoder;
-    struct AADDecoder *decoder;
-
-    /* 出力データの領域割当て */
-    for (ch = 0; ch < NUM_CHANNELS; ch++) {
-      input[ch] = malloc(sizeof(int32_t) * NUM_SAMPLES);
-      decoded[ch] = malloc(sizeof(int32_t) * NUM_SAMPLES);
-    }
-    /* 入力wavと同じサイズの出力領域を確保（増えることはないと期待） */
-    buffer_size = NUM_CHANNELS * NUM_SAMPLES * sizeof(int32_t);
-    buffer = malloc(buffer_size);
-
-    /* データ作成: 正弦波 */
-    for (ch = 0; ch < NUM_CHANNELS; ch++) {
-      for (smpl = 0; smpl < NUM_SAMPLES; smpl++) {
-        input[ch][smpl] = INT16_MAX * 0.5 * sin((2.0 * 3.1415 * 440.0 * smpl) / 48000.0);
-      }
-    }
-
-    /* ハンドル作成 */
-    encoder = AADEncoder_Create(NULL, 0);
-    decoder = AADDecoder_Create(NULL, 0);
-
-    /* エンコードパラメータをセット */
-    enc_param.num_channels    = NUM_CHANNELS;
-    enc_param.sampling_rate   = 8000;
-    enc_param.bits_per_sample = AAD_MAX_BITS_PER_SAMPLE;
-    enc_param.block_size      = 256;
-    Test_AssertEqual(AADEncoder_SetEncodeParameter(encoder, &enc_param), AAD_APIRESULT_OK);
-
-    /* エンコード */
-    Test_AssertEqual(
-        AADEncoder_EncodeWhole(
-          encoder, (const int32_t *const *)input, NUM_SAMPLES,
-          buffer, buffer_size, &output_size), AAD_APIRESULT_OK);
-    /* 半分以下にはなるはず */
-    Test_AssertCondition(output_size < (buffer_size / 2));
-
-    /* デコード */
-    Test_AssertEqual(
-        AADDecoder_DecodeWhole(
-          decoder, buffer, output_size,
-          decoded, NUM_CHANNELS, NUM_SAMPLES), AAD_APIRESULT_OK);
-
-    /* ロスがあるのでRMSE基準でチェック */
-    rms_error = 0.0;
-    for (ch = 0; ch < NUM_CHANNELS; ch++) {
-      for (smpl = 0; smpl < NUM_SAMPLES; smpl++) {
-        double pcm1, pcm2, abs_error;
-        pcm1 = (double)input[ch][smpl] / INT16_MAX;
-        pcm2 = (double)decoded[ch][smpl] / INT16_MAX;
-        abs_error = fabs(pcm1 - pcm2);
-        rms_error += abs_error * abs_error;
-      }
-    }
-    rms_error = sqrt(rms_error / (NUM_SAMPLES * NUM_CHANNELS));
-
-    /* 経験的に0.05 */
-    Test_AssertCondition(rms_error < 5.0e-2);
-
-    /* 領域開放 */
-    AADEncoder_Destroy(encoder);
-    AADDecoder_Destroy(decoder);
-    free(buffer);
-    for (ch = 0; ch < NUM_CHANNELS; ch++) {
-      free(input[ch]);
-      free(decoded[ch]);
-    }
-#undef NUM_CHANNELS
-#undef NUM_SAMPLES
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse_mono.wav", 4,   64, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse_mono.wav", 4,  256, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse_mono.wav", 4, 1024, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse_mono.wav", 4, 4096, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse.wav",      4,   64, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse.wav",      4,  256, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse.wav",      4, 1024, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse.wav",      4, 4096, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz_mono.wav",     4,   64, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz_mono.wav",     4,  256, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz_mono.wav",     4, 1024, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz_mono.wav",     4, 4096, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz.wav",          4,   64, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz.wav",          4,  256, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz.wav",          4, 1024, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz.wav",          4, 4096, 5.0e-2), 1);
   }
-
-  /* エンコードデコードテスト */
-  {
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("unit_impulse_mono.wav", 4,  128, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("unit_impulse_mono.wav", 4,  256, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("unit_impulse_mono.wav", 4,  512, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("unit_impulse_mono.wav", 4, 1024, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("unit_impulse.wav",      4,  128, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("unit_impulse.wav",      4,  256, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("unit_impulse.wav",      4,  512, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("unit_impulse.wav",      4, 1024, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("sin300Hz_mono.wav",     4,  128, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("sin300Hz_mono.wav",     4,  256, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("sin300Hz_mono.wav",     4,  512, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("sin300Hz_mono.wav",     4, 1024, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("sin300Hz.wav",          4,  128, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("sin300Hz.wav",          4,  256, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("sin300Hz.wav",          4,  512, 5.0e-2), 1);
-    Test_AssertEqual(testAADEncoder_EncodeDecodeTest("sin300Hz.wav",          4, 1024, 5.0e-2), 1);
-  }
-
 }
 
-void testAAD_Setup(void)
+void AADTest_Setup(void)
 {
   struct TestSuite *suite
     = Test_AddTestSuite("AAD Test Suite",
-        NULL, testByteArray_Initialize, testByteArray_Finalize);
+        NULL, AADTest_Initialize, AADTest_Finalize);
 
-  Test_AddTest(suite, testAAD_HeaderEncodeDecodeTest);
-  Test_AddTest(suite, testAADDecoder_CreateDestroyTest);
-  Test_AddTest(suite, testAADDecoder_DecodeTest);
-  Test_AddTest(suite, testAADEncoder_CreateDestroyTest);
-  Test_AddTest(suite, testAADEncoder_SetEncodeParameterTest);
-  Test_AddTest(suite, testAADDecoder_EncodeTest);
+  Test_AddTest(suite, AADTest_HeaderEncodeDecodeTest);
+  Test_AddTest(suite, AADTest_CalculateBlockSizeTest);
+  Test_AddTest(suite, AADDecoderTest_CreateDestroyTest);
+  Test_AddTest(suite, AADDecoderTest_DecodeTest);
+  Test_AddTest(suite, AADEncoderTest_CreateDestroyTest);
+  Test_AddTest(suite, AADEncoderTest_SetEncodeParameterTest);
+  Test_AddTest(suite, AADDecoderTest_EncodeTest);
+  Test_AddTest(suite, AADTest_EncodeDecodeTest);
 }
