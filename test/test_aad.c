@@ -523,7 +523,7 @@ static void AADEncoderTest_SetEncodeParameterTest(void *obj)
 }
 
 /* エンコードテスト */
-static void AADDecoderTest_EncodeTest(void *obj)
+static void AADTest_EncodeDecodeSimpleDataTest(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
 
@@ -708,11 +708,13 @@ static uint8_t AADTest_EncodeDecodeCheck(
   rms_error = sqrt(rms_error / (num_samples * num_channels));
 
   /* マージンチェック */
-  if (rms_error < rms_epsilon) {
-    is_ok = 1;
-  } else {
+  if (rms_error >= rms_epsilon) {
     is_ok = 0;
-  }
+    goto CHECK_END;
+  } 
+
+  /* ここまできたらOK */
+  is_ok = 1;
 
 CHECK_END:
   /* 領域開放 */
@@ -733,19 +735,19 @@ static void AADTest_EncodeDecodeTest(void *obj)
   TEST_UNUSED_PARAMETER(obj);
 
   {
-    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse_mono.wav", 4,   64, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse_mono.wav", 4,  128, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse_mono.wav", 4,  256, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse_mono.wav", 4, 1024, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse_mono.wav", 4, 4096, 5.0e-2), 1);
-    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse.wav",      4,   64, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse.wav",      4,  128, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse.wav",      4,  256, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse.wav",      4, 1024, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("unit_impulse.wav",      4, 4096, 5.0e-2), 1);
-    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz_mono.wav",     4,   64, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz_mono.wav",     4,  128, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz_mono.wav",     4,  256, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz_mono.wav",     4, 1024, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz_mono.wav",     4, 4096, 5.0e-2), 1);
-    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz.wav",          4,   64, 5.0e-2), 1);
+    Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz.wav",          4,  128, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz.wav",          4,  256, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz.wav",          4, 1024, 5.0e-2), 1);
     Test_AssertEqual(AADTest_EncodeDecodeCheck("sin300Hz.wav",          4, 4096, 5.0e-2), 1);
@@ -764,6 +766,6 @@ void AADTest_Setup(void)
   Test_AddTest(suite, AADDecoderTest_DecodeTest);
   Test_AddTest(suite, AADEncoderTest_CreateDestroyTest);
   Test_AddTest(suite, AADEncoderTest_SetEncodeParameterTest);
-  Test_AddTest(suite, AADDecoderTest_EncodeTest);
+  Test_AddTest(suite, AADTest_EncodeDecodeSimpleDataTest);
   Test_AddTest(suite, AADTest_EncodeDecodeTest);
 }
