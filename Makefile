@@ -4,7 +4,7 @@ CPPFLAGS	= -DDEBUG
 LDFLAGS		= -Wall -Wextra -Wpedantic -O0
 LDLIBS		= -lm
 
-SRCS      = aad.c wav.c main.c
+SRCS      = aad.c wav.c command_line_parser.c main.c
 OBJS			= $(SRCS:%.c=%.o)
 TARGETS   = aad
 
