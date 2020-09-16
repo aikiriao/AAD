@@ -32,7 +32,7 @@ static struct CommandLineParserSpecification command_line_spec[] = {
     "Gap(residual output) mode (wav file -> (encode -> decode) -> residual wav file)",
     NULL, COMMAND_LINE_PARSER_FALSE },
   { 'c', "calculate", COMMAND_LINE_PARSER_FALSE, 
-    "Calculate statistics(RMS error) between original and reconstructed wav", 
+    "Calculate statistics(e.g. RMS error) between original and reconstructed wav", 
     NULL, COMMAND_LINE_PARSER_FALSE },
   { 'b', "bits-per-sample", COMMAND_LINE_PARSER_TRUE, 
     "Specify bits per sample(in 2,3,4) (default: 4)", 
