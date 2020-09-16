@@ -9,13 +9,12 @@
 /* アラインメント */
 #define AAD_ALIGNMENT                 16
 
-#define AAD_FILTER_ORDER              4
-#define AAD_FIXEDPOINT_DIGITS         15
-#define AAD_FIXEDPOINT_0_5            (1 << (AAD_FIXEDPOINT_DIGITS - 1))
-#define AAD_PREEMPHASIS_SHIFT         5
-#define AAD_PREEMPHASIS_NUMER         ((1 << AAD_PREEMPHASIS_SHIFT) - 1)
-#define AAD_NOISE_SHAPING_SHIFT       2
-#define AAD_LMSFILTER_SHIFT           4
+/* エンコード/デコード時に使用する定数 */
+#define AAD_FILTER_ORDER              4                                   /* フィルタ係数長     */
+#define AAD_FIXEDPOINT_DIGITS         15                                  /* 固定小数点の小数桁 */
+#define AAD_FIXEDPOINT_0_5            (1 << (AAD_FIXEDPOINT_DIGITS - 1))  /* 固定小数点の0.5    */
+#define AAD_NOISE_SHAPING_SHIFT       2                                   /* ノイズシェーピングのフィードバックゲインの右シフト量 */
+#define AAD_LMSFILTER_SHIFT           4                                   /* LMSフィルタ係数更新時のシフト量 */
 
 /* 最大の符号化値 */
 #define AAD_MAX_CODE_VALUE            ((1 << AAD_MAX_BITS_PER_SAMPLE) - 1)
@@ -31,10 +30,6 @@
 
 /* min以上max未満に制限 */
 #define AAD_INNER_VAL(val, min, max)  AAD_MAX_VAL(min, AAD_MIN_VAL(max, val))
-
-/* 指定サンプル数が占めるデータサイズ[byte]を計算 */
-#define AAD_CALCULATE_DATASIZE_BYTE(num_samples, bits_per_sample) \
-  (AAD_ROUND_UP((num_samples) * (bits_per_sample), 8) / 8)
 
 /* ブロックヘッダサイズの計算 */
 #define AAD_BLOCK_HEADER_SIZE(num_channels) (18 * (num_channels))
@@ -59,10 +54,10 @@ typedef enum AADErrorTag {
 
 /* コア処理ハンドル */
 struct AADProcessor {
-  int16_t history[AAD_FILTER_ORDER];
-  int32_t weight[AAD_FILTER_ORDER];
-  uint8_t stepsize_index;         /* ステップサイズテーブルの参照インデックス     */
-  int32_t quantize_error;         /* 量子化誤差（エンコード時のみ） */
+  int16_t history[AAD_FILTER_ORDER];  /* 入力データ履歴 */
+  int32_t weight[AAD_FILTER_ORDER];   /* フィルタ係数   */
+  uint8_t stepsize_index;             /* ステップサイズテーブルの参照インデックス     */
+  int32_t quantize_error;             /* 量子化誤差（FIXME: エンコード時のみ） */
 };
 
 /* デコーダ */
@@ -96,23 +91,26 @@ static AADApiResult AADEncoder_EncodeBlock(
     const int32_t *const *input, uint32_t num_samples, 
     uint8_t *data, uint32_t data_size, uint32_t *output_size);
 
-/* インデックス変動テーブル */
+/* インデックス変動テーブル: 4bit */
 static const int8_t AAD_index_table_4bit[16] = {
   -1, -1, -1, -1, 2, 4, 6, 8, 
   -1, -1, -1, -1, 2, 4, 6, 8 
 };
 
+/* インデックス変動テーブル: 3bit */
 static const int8_t AAD_index_table_3bit[8] = {
   -1, -1, 2, 4,
   -1, -1, 2, 4,
 };
 
+/* インデックス変動テーブル: 2bit */
 static const int8_t AAD_index_table_2bit[4] = {
   -1, 2,
   -1, 2,
 };
 
 #if 0
+/* インデックス変動テーブル: 1bit */
 /* Future work... */
 static const int8_t AAD_index_table_1bit[2] = {
   -1, 2,
