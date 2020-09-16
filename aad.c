@@ -6,19 +6,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* TODO: for debug */
-#include <math.h>
-
 /* アラインメント */
-#define AAD_ALIGNMENT             16
+#define AAD_ALIGNMENT                 16
 
-#define AAD_FILTER_ORDER          4
-#define AAD_FIXEDPOINT_DIGITS     15
-#define AAD_FIXEDPOINT_0_5        (1 << (AAD_FIXEDPOINT_DIGITS - 1))
-#define AAD_PREEMPHASIS_SHIFT     5
-#define AAD_PREEMPHASIS_NUMER     ((1 << AAD_PREEMPHASIS_SHIFT) - 1)
-#define AAD_NOISE_SHAPING_SHIFT   2
-#define AAD_LMSFILTER_SHIFT       3
+#define AAD_FILTER_ORDER              4
+#define AAD_FIXEDPOINT_DIGITS         15
+#define AAD_FIXEDPOINT_0_5            (1 << (AAD_FIXEDPOINT_DIGITS - 1))
+#define AAD_PREEMPHASIS_SHIFT         5
+#define AAD_PREEMPHASIS_NUMER         ((1 << AAD_PREEMPHASIS_SHIFT) - 1)
+#define AAD_NOISE_SHAPING_SHIFT       2
+#define AAD_LMSFILTER_SHIFT           4
 
 /* 最大の符号化値 */
 #define AAD_MAX_CODE_VALUE            ((1 << AAD_MAX_BITS_PER_SAMPLE) - 1)
@@ -115,27 +112,13 @@ static const int8_t AAD_index_table_2bit[4] = {
   -1, 2,
 };
 
+#if 0
+/* Future work... */
 static const int8_t AAD_index_table_1bit[2] = {
   -1, 2,
 };
+#endif
 
-/* ステップサイズ量子化テーブル */
-#if 0
-static const uint16_t AAD_stepsize_table[89] = {
-      7,     8,     9,    10,    11,    12,    13,    14, 
-     16,    17,    19,    21,    23,    25,    28,    31, 
-     34,    37,    41,    45,    50,    55,    60,    66,
-     73,    80,    88,    97,   107,   118,   130,   143, 
-    157,   173,   190,   209,   230,   253,   279,   307,
-    337,   371,   408,   449,   494,   544,   598,   658,
-    724,   796,   876,   963,  1060,  1166,  1282,  1411, 
-   1552,  1707,  1878,  2066,  2272,  2499,  2749,  3024,
-   3327,  3660,  4026,  4428,  4871,  5358,  5894,  6484,
-   7132,  7845,  8630,  9493, 10442, 11487, 12635, 13899,
-  15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794,
-  32767
-};
-#else
 /* ステップサイズ量子化テーブル */
 /* x + 2 ** (log2(32767 - 255) / 255 * x) で生成 */
 static const uint16_t AAD_stepsize_table[256] = {
@@ -172,7 +155,6 @@ static const uint16_t AAD_stepsize_table[256] = {
   17885, 18620, 19385, 20182, 21013, 21877, 22778, 23716,
   24693, 25710, 26770, 27874, 29023, 30221, 31468, 32767,
 };
-#endif
 
 /* 最大公約数の計算 */
 static uint32_t AAD_CalculateGCD(uint32_t a, uint32_t b)
@@ -218,7 +200,7 @@ AADApiResult AADEncoder_CalculateBlockSize(
   }
 
   /* インターリーブ配置したデータ単位サイズ[byte] */
-  interleave_data_unit_size = AAD_CalculateLCM(8, num_channels * bits_per_sample) / 8;
+  interleave_data_unit_size = num_channels * (AAD_CalculateLCM(8, bits_per_sample) / 8);
   num_samples_per_interleave_data_unit = (interleave_data_unit_size * 8) / (num_channels * bits_per_sample);
 
   /* ブロックデータサイズの計算 */
@@ -399,7 +381,7 @@ static int32_t AADProcessor_DecodeSample(
 
   assert(processor != NULL);
   assert((bpsample >= 2) && (bpsample <= AAD_MAX_BITS_PER_SAMPLE));
-  assert(nibble <= AAD_MAX_CODE_VALUE);
+  assert(nibble <= ((1U << bpsample) - 1));
 
   /* 頻繁に参照する変数をオート変数に受ける */
   idx = processor->stepsize_index;
@@ -441,10 +423,10 @@ static int32_t AADProcessor_DecodeSample(
   processor->stepsize_index = (uint8_t)idx;
 
   /* 係数更新 */
-  processor->weight[3] += (qdiff * processor->history[3] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + 3);
-  processor->weight[2] += (qdiff * processor->history[2] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + 3);
-  processor->weight[1] += (qdiff * processor->history[1] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + 3);
-  processor->weight[0] += (qdiff * processor->history[0] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + 3);
+  processor->weight[3] += (qdiff * processor->history[3] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
+  processor->weight[2] += (qdiff * processor->history[2] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
+  processor->weight[1] += (qdiff * processor->history[1] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
+  processor->weight[0] += (qdiff * processor->history[0] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
 
   /* 入力データ履歴更新 */
   processor->history[3] = processor->history[2];
@@ -478,21 +460,19 @@ static AADApiResult AADDecoder_DecodeBlock(
   header = &(decoder->header);
 
   /* ブロックヘッダのサイズに満たない */
-  if (data_size <= AAD_BLOCK_HEADER_SIZE(header->num_channels)) {
+  if (data_size < AAD_BLOCK_HEADER_SIZE(header->num_channels)) {
     return AAD_APIRESULT_INSUFFICIENT_DATA;
   }
 
   /* 読み出しポインタのセット */
   read_pos = data;
 
-  /* デコード可能なサンプル数を計算 */
-  tmp_num_decode_samples
-    = AAD_MIN_VAL(header->num_samples_per_block,
-        AAD_NUM_SAMPLES_IN_BLOCK(data_size, header->num_channels, header->bits_per_sample));
+  /* デコードサンプル数を計算 */
+  /* 補足: ブロック未満の場合はバッファがいっぱいになるまでデコード実行 */
+  tmp_num_decode_samples = AAD_MIN_VAL(header->num_samples_per_block, buffer_num_samples);
 
   /* バッファサイズチェック */
-  if ((buffer_num_channels < header->num_channels)
-      || (buffer_num_samples < tmp_num_decode_samples)) {
+  if (buffer_num_channels < header->num_channels) {
     return AAD_APIRESULT_INSUFFICIENT_BUFFER;
   }
 
@@ -527,41 +507,84 @@ static AADApiResult AADDecoder_DecodeBlock(
   switch (header->bits_per_sample) {
     case 4:
       for (smpl = AAD_FILTER_ORDER; smpl < tmp_num_decode_samples; smpl += 2) {
-        uint8_t code;
+        uint32_t  i;
+        uint8_t   code;
+        int32_t   outbuf[AAD_MAX_NUM_CHANNELS][2];
         for (ch = 0; ch < header->num_channels; ch++) {
           assert((uint32_t)(read_pos - data) < data_size);
           assert((uint32_t)(read_pos - data) < header->block_size);
           ByteArray_GetUint8(read_pos, &code);
-          // printf("%d %d %d \n", smpl, (uint32_t)(read_pos - data), code);
-          buffer[ch][smpl + 0] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 4) & 0xF, 4); 
-          buffer[ch][smpl + 1] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 0) & 0xF, 4); 
+          outbuf[ch][0] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 4) & 0xF, 4); 
+          outbuf[ch][1] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 0) & 0xF, 4); 
           assert((uint32_t)(read_pos - data) <= data_size);
           assert((uint32_t)(read_pos - data) <= header->block_size);
-          /* FIXME: smpl + 1 がバッファオーバーランする可能性がある */
         }
         /* TODO: MS -> LR */
+        for (ch = 0; ch < header->num_channels; ch++) {
+          for (i = 0; (i < 2) && ((smpl + i) < tmp_num_decode_samples); i++) {
+            buffer[ch][smpl + i] = outbuf[ch][i];
+            assert((smpl + i) < buffer_num_samples);
+          }
+        }
+      }
+      break;
+    case 3:
+      for (smpl = AAD_FILTER_ORDER; smpl < tmp_num_decode_samples; smpl += 8) {
+        uint32_t  i;
+        uint8_t   code[3];
+        int32_t   outbuf[AAD_MAX_NUM_CHANNELS][8];
+        for (ch = 0; ch < header->num_channels; ch++) {
+          assert((uint32_t)(read_pos - data) < data_size);
+          assert((uint32_t)(read_pos - data) < header->block_size);
+          ByteArray_GetUint8(read_pos, &code[0]);
+          ByteArray_GetUint8(read_pos, &code[1]);
+          ByteArray_GetUint8(read_pos, &code[2]);
+          /* TODO: 3bit単位の符号出し入れのマクロ化 */
+          outbuf[ch][0] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code[0] >> 5) & 0x7, 3); 
+          outbuf[ch][1] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code[0] >> 2) & 0x7, 3); 
+          outbuf[ch][2] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (uint8_t)(((code[0] & 0x3) << 1) | ((code[1] >> 7) & 0x1)), 3); 
+          outbuf[ch][3] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code[1] >> 4) & 0x7, 3); 
+          outbuf[ch][4] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code[1] >> 1) & 0x7, 3); 
+          outbuf[ch][5] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (uint8_t)(((code[1] & 0x1) << 2) | ((code[2] >> 6) & 0x3)), 3); 
+          outbuf[ch][6] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code[2] >> 3) & 0x7, 3); 
+          outbuf[ch][7] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code[2] >> 0) & 0x7, 3); 
+          assert((uint32_t)(read_pos - data) <= data_size);
+          assert((uint32_t)(read_pos - data) <= header->block_size);
+        }
+        /* TODO: MS -> LR */
+        for (ch = 0; ch < header->num_channels; ch++) {
+          for (i = 0; (i < 8) && ((smpl + i) < tmp_num_decode_samples); i++) {
+            buffer[ch][smpl + i] = outbuf[ch][i];
+            assert((smpl + i) < buffer_num_samples);
+          }
+        }
       }
       break;
     case 2:
       for (smpl = AAD_FILTER_ORDER; smpl < tmp_num_decode_samples; smpl += 4) {
-        uint8_t code;
+        uint32_t  i;
+        uint8_t   code;
+        int32_t   outbuf[AAD_MAX_NUM_CHANNELS][4];
         for (ch = 0; ch < header->num_channels; ch++) {
           assert((uint32_t)(read_pos - data) < data_size);
           assert((uint32_t)(read_pos - data) < header->block_size);
           ByteArray_GetUint8(read_pos, &code);
-          // printf("%d %d %d \n", smpl, (uint32_t)(read_pos - data), code);
-          buffer[ch][smpl + 0] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 6) & 0x3, 2); 
-          buffer[ch][smpl + 1] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 4) & 0x3, 2); 
-          buffer[ch][smpl + 2] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 2) & 0x3, 2); 
-          buffer[ch][smpl + 3] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 0) & 0x3, 2); 
+          outbuf[ch][0] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 6) & 0x3, 2); 
+          outbuf[ch][1] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 4) & 0x3, 2); 
+          outbuf[ch][2] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 2) & 0x3, 2); 
+          outbuf[ch][3] = AADProcessor_DecodeSample(&(decoder->processor[ch]), (code >> 0) & 0x3, 2); 
           assert((uint32_t)(read_pos - data) <= data_size);
           assert((uint32_t)(read_pos - data) <= header->block_size);
-          /* FIXME: smpl + 1 ... smpl + 3 がバッファオーバーランする可能性がある */
         }
         /* TODO: MS -> LR */
+        for (ch = 0; ch < header->num_channels; ch++) {
+          for (i = 0; (i < 4) && ((smpl + i) < tmp_num_decode_samples); i++) {
+            buffer[ch][smpl + i] = outbuf[ch][i];
+            assert((smpl + i) < buffer_num_samples);
+          }
+        }
       }
       break;
-    case 3:
     default:
       return AAD_APIRESULT_INVALID_FORMAT;
   }
@@ -621,6 +644,8 @@ AADApiResult AADDecoder_DecodeWhole(
     read_pos    += read_block_size;
     read_offset += read_block_size;
     progress    += num_decode_samples;
+    assert(progress <= buffer_num_samples);
+    assert(read_offset <= data_size);
   }
 
   /* 成功終了 */
@@ -864,16 +889,17 @@ static AADApiResult AADEncoder_EncodeBlock(
   /* 書き出しポインタのセット */
   data_pos = data;
 
-  /* これこわい */
-  assert(num_samples >= AAD_FILTER_ORDER);
-
   /* フィルタに先頭サンプルをセット */
   for (ch = 0; ch < header->num_channels; ch++) {
+    /* 総サンプル数がフィルタ次数より少ない場合がある */
+    uint32_t num_buffer = AAD_MIN_VAL(AAD_FILTER_ORDER, num_samples);
     for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
-      assert(input[ch][smpl] <= INT16_MAX);
-      assert(input[ch][smpl] >= INT16_MIN);
-      encoder->processor[ch].history[AAD_FILTER_ORDER - smpl - 1]
-        = (int16_t)input[ch][smpl];
+      encoder->processor[ch].history[AAD_FILTER_ORDER - smpl - 1] = 0;
+      if (smpl < num_buffer) {
+        assert(input[ch][smpl] <= INT16_MAX); assert(input[ch][smpl] >= INT16_MIN);
+        encoder->processor[ch].history[AAD_FILTER_ORDER - smpl - 1]
+          = (int16_t)input[ch][smpl];
+      }
     }
   }
 
@@ -881,6 +907,10 @@ static AADApiResult AADEncoder_EncodeBlock(
   for (ch = 0; ch < header->num_channels; ch++) {
     /* フィルタの状態 */
     for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
+      encoder->processor[ch].weight[smpl]
+        = AAD_INNER_VAL(encoder->processor[ch].weight[smpl], INT16_MIN, INT16_MAX);
+      assert(encoder->processor[ch].weight[smpl] <= INT16_MAX);
+      assert(encoder->processor[ch].weight[smpl] >= INT16_MIN);
       ByteArray_PutUint16BE(data_pos, (uint16_t)encoder->processor[ch].weight[smpl]);
       ByteArray_PutUint16BE(data_pos, encoder->processor[ch].history[smpl]);
     }
@@ -893,23 +923,64 @@ static AADApiResult AADEncoder_EncodeBlock(
   /* ブロックヘッダサイズチェック */
   assert((uint32_t)(data_pos - data) == AAD_BLOCK_HEADER_SIZE(header->num_channels));
 
-  /* TODO: LR -> MSをどこに突っ込むよ？ここ？ */
-
   /* データエンコード */
   switch (header->bits_per_sample) {
     case 4:
       for (smpl = AAD_FILTER_ORDER; smpl < num_samples; smpl += 2) {
         uint8_t code[2];
-        /* TODO: LR -> MSここかも 2x6のバッファを用意 */
+        int32_t inbuf[AAD_MAX_NUM_CHANNELS][2] = { { 0, } };
+        /* TODO: LR -> MS */
+        for (ch = 0; ch < header->num_channels; ch++) {
+          uint32_t i;
+          for (i = 0; (i < 2) && ((smpl + i) < num_samples); i++) {
+            inbuf[ch][i] = input[ch][smpl + i];
+          }
+        }
         for (ch = 0; ch < header->num_channels; ch++) {
           assert((uint32_t)(data_pos - data) < data_size);
           assert((uint32_t)(data_pos - data) < header->block_size);
-          /* FIXME: smpl + 1 がオーバーランする可能性がある */
           code[0] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 0], 4);
           code[1] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 1], 4);
           assert((code[0] <= 0xF) && (code[1] <= 0xF));
           ByteArray_PutUint8(data_pos, (code[0] << 4) | code[1]);
-          // printf("%d %d %d \n", smpl, (uint32_t)(data_pos - data), (code[0] << 4) | code[1]);
+          assert((uint32_t)(data_pos - data) <= data_size);
+          assert((uint32_t)(data_pos - data) <= header->block_size);
+        }
+      }
+      break;
+    case 3:
+      for (smpl = AAD_FILTER_ORDER; smpl < num_samples; smpl += 8) {
+        uint8_t code[8];
+        uint8_t outbuf[3];
+        int32_t inbuf[AAD_MAX_NUM_CHANNELS][8] = { { 0, } };
+        /* TODO: LR -> MS */
+        for (ch = 0; ch < header->num_channels; ch++) {
+          uint32_t i;
+          for (i = 0; (i < 8) && ((smpl + i) < num_samples); i++) {
+            inbuf[ch][i] = input[ch][smpl + i];
+          }
+        }
+        for (ch = 0; ch < header->num_channels; ch++) {
+          assert((uint32_t)(data_pos - data) < data_size);
+          assert((uint32_t)(data_pos - data) < header->block_size);
+          code[0] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][0], 3);
+          code[1] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][1], 3);
+          code[2] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][2], 3);
+          code[3] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][3], 3);
+          code[4] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][4], 3);
+          code[5] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][5], 3);
+          code[6] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][6], 3);
+          code[7] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][7], 3);
+          assert((code[0] <= 0x7) && (code[1] <= 0x7) && (code[2] <= 0x7) && (code[3] <= 0x7)
+              && (code[4] <= 0x7) && (code[5] <= 0x7) && (code[6] <= 0x7) && (code[7] <= 0x7));
+          /* 3byteに詰める */
+          outbuf[0] = (uint8_t)((code[0] << 5) | (code[1] << 2) | ((code[2] & 0x6) >> 1));
+          outbuf[1] = (uint8_t)(((code[2] & 0x1) << 7) | (code[3] << 4) | (code[4] << 1) | ((code[5] & 0x4) >> 2));
+          outbuf[2] = (uint8_t)(((code[5] & 0x3) << 6) | (code[6] << 3) | (code[7]));
+          assert((outbuf[0] <= 0xFF) && (outbuf[1] <= 0xFF) && (outbuf[2] <= 0xFF));
+          ByteArray_PutUint8(data_pos, outbuf[0]);
+          ByteArray_PutUint8(data_pos, outbuf[1]);
+          ByteArray_PutUint8(data_pos, outbuf[2]);
           assert((uint32_t)(data_pos - data) <= data_size);
           assert((uint32_t)(data_pos - data) <= header->block_size);
         }
@@ -918,25 +989,28 @@ static AADApiResult AADEncoder_EncodeBlock(
     case 2:
       for (smpl = AAD_FILTER_ORDER; smpl < num_samples; smpl += 4) {
         uint8_t code[4];
+        int32_t inbuf[AAD_MAX_NUM_CHANNELS][4] = { { 0, } };
         /* TODO: LR -> MS */
+        for (ch = 0; ch < header->num_channels; ch++) {
+          uint32_t i;
+          for (i = 0; (i < 4) && ((smpl + i) < num_samples); i++) {
+            inbuf[ch][i] = input[ch][smpl + i];
+          }
+        }
         for (ch = 0; ch < header->num_channels; ch++) {
           assert((uint32_t)(data_pos - data) < data_size);
           assert((uint32_t)(data_pos - data) < header->block_size);
-          /* FIXME: smpl + 1 ... smpl + 3 がオーバーランする可能性がある */
-          code[0] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 0], 2);
-          code[1] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 1], 2);
-          code[2] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 2], 2);
-          code[3] = AADProcessor_EncodeSample(&(encoder->processor[ch]), input[ch][smpl + 3], 2);
-          assert((code[0] <= 0x3) && (code[1] <= 0x3)
-              && (code[2] <= 0x3) && (code[3] <= 0x3));
+          code[0] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][0], 2);
+          code[1] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][1], 2);
+          code[2] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][2], 2);
+          code[3] = AADProcessor_EncodeSample(&(encoder->processor[ch]), inbuf[ch][3], 2);
+          assert((code[0] <= 0x3) && (code[1] <= 0x3) && (code[2] <= 0x3) && (code[3] <= 0x3));
           ByteArray_PutUint8(data_pos, (code[0] << 6) | (code[1] << 4) | (code[2] << 2) | ((code[3] << 0)));
-          // printf("%d %d %d \n", smpl, (uint32_t)(data_pos - data), (code[0] << 4) | code[1]);
           assert((uint32_t)(data_pos - data) <= data_size);
           assert((uint32_t)(data_pos - data) <= header->block_size);
         }
       }
       break;
-    case 3:
     default:
       return AAD_APIRESULT_INVALID_FORMAT;
   }
@@ -964,8 +1038,8 @@ static AADError AADEncoder_ConvertParameterToHeader(
       || (enc_param->bits_per_sample > AAD_MAX_BITS_PER_SAMPLE)) {
     return AAD_ERROR_INVALID_FORMAT;
   }
-  /* 異常なブロックサイズ */
-  if (enc_param->max_block_size <= AAD_BLOCK_HEADER_SIZE(enc_param->num_channels)) {
+  /* ブロックサイズが小さすぎる */
+  if (enc_param->max_block_size < AAD_BLOCK_HEADER_SIZE(enc_param->num_channels)) {
     return AAD_ERROR_INVALID_FORMAT;
   }
 
@@ -984,8 +1058,6 @@ static AADError AADEncoder_ConvertParameterToHeader(
     return AAD_ERROR_INVALID_FORMAT;
   }
 
-  /* ブロックあたりサンプル数 */
-
   /* 成功終了 */
   (*header_info) = tmp_header;
 
@@ -996,7 +1068,7 @@ static AADError AADEncoder_ConvertParameterToHeader(
 AADApiResult AADEncoder_SetEncodeParameter(
     struct AADEncoder *encoder, const struct AADEncodeParameter *parameter)
 {
-  struct AADHeaderInfo tmp_header = {0, };
+  struct AADHeaderInfo tmp_header = { 0, };
 
   /* 引数チェック */
   if ((encoder == NULL) || (parameter == NULL)) {
@@ -1052,9 +1124,19 @@ AADApiResult AADEncoder_EncodeWhole(
   }
   header = &(encoder->header);
 
+  /* 進捗状況初期化 */
   progress = 0;
   write_offset = AAD_HEADER_SIZE;
   data_pos = data + AAD_HEADER_SIZE;
+
+  /* フィルタの適応を早めるため、先頭部分を一回空エンコード */
+  if ((ret = AADEncoder_EncodeBlock(encoder,
+          input, AAD_MIN_VAL(header->num_samples_per_block, num_samples),
+          data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
+    return ret;
+  }
+
+  /* ブロックを時系列順にエンコード */
   while (progress < num_samples) {
     /* エンコードサンプル数の確定 */
     num_encode_samples
