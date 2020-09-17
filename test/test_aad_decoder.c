@@ -1,10 +1,6 @@
+#include "test.h"
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <sys/stat.h>
-#include <assert.h>
-#include <math.h>
-#include "test.h"
 
 /* テスト対象のモジュール */
 #include "../aad_decoder.c"

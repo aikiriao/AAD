@@ -1,10 +1,6 @@
+#include "test.h"
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <sys/stat.h>
-#include <assert.h>
-#include <math.h>
-#include "test.h"
 
 /* テスト対象のモジュール */
 #include "../aad_encoder.c"
@@ -99,6 +95,21 @@ static void AADEncoderTest_HeaderEncodeTest(void *obj)
   header__p->num_samples            = 1024;                     \
   header__p->num_samples_per_block  = 32;                       \
 }
+
+  /* ヘッダエンコード成功ケース */
+  {
+    struct AADHeaderInfo header;
+    uint8_t data[AAD_HEADER_SIZE] = { 0, };
+
+    AAD_SetValidHeader(&header);
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_OK);
+
+    /* 簡易チェック */
+    Test_AssertEqual(data[0], 'A');
+    Test_AssertEqual(data[1], 'A');
+    Test_AssertEqual(data[2], 'D');
+    Test_AssertEqual(data[3], '\0');
+  }
 
   /* ヘッダエンコード失敗ケース */
   {
