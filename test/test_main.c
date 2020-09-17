@@ -2,7 +2,9 @@
 
 /* 各テストスイートのセットアップ関数宣言 */
 void ByteArrayTest_Setup(void);
-void AADTest_Setup(void);
+void AADEncoderTest_Setup(void);
+void AADDecoderTest_Setup(void);
+void AADEncodeDecodeTest_Setup(void);
 
 /* テスト実行 */
 int main(int argc, char **argv)
@@ -15,7 +17,9 @@ int main(int argc, char **argv)
   Test_Initialize();
 
   ByteArrayTest_Setup();
-  AADTest_Setup();
+  AADEncoderTest_Setup();
+  AADDecoderTest_Setup();
+  AADEncodeDecodeTest_Setup();
 
   ret = Test_RunAllTestSuite();
 

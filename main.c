@@ -5,6 +5,8 @@
  * http://www.wtfpl.net/ for more details. */
 
 #include "aad.h"
+#include "aad_encoder.h"
+#include "aad_decoder.h"
 #include "wav.h"
 #include "command_line_parser.h"
 
@@ -15,7 +17,7 @@
 #include <math.h>
 
 /* バージョン文字列 */
-#define AADCUI_VERSION_STRING  "1.2.0"
+#define AADCUI_VERSION_STRING  "1.2.1"
 
 /* コマンドライン仕様 */
 static struct CommandLineParserSpecification command_line_spec[] = {
