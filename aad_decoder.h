@@ -24,6 +24,13 @@ struct AADDecoder *AADDecoder_Create(void *work, int32_t work_size);
 /* デコーダハンドル破棄 */
 void AADDecoder_Destroy(struct AADDecoder *decoder);
 
+/* 単一データブロックデコード */
+AADApiResult AADDecoder_DecodeBlock(
+    struct AADDecoder *decoder,
+    const uint8_t *data, uint32_t data_size, 
+    int32_t **buffer, uint32_t buffer_num_channels, uint32_t buffer_num_samples, 
+    uint32_t *num_decode_samples);
+
 /* ヘッダ含めファイル全体をデコード */
 AADApiResult AADDecoder_DecodeWhole(
     struct AADDecoder *decoder,

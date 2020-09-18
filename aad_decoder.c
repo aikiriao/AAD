@@ -279,7 +279,7 @@ static int32_t AADDecodeProcessor_DecodeSample(
 }
 
 /* 単一データブロックデコード */
-static AADApiResult AADDecoder_DecodeBlock(
+AADApiResult AADDecoder_DecodeBlock(
     struct AADDecoder *decoder,
     const uint8_t *data, uint32_t data_size, 
     int32_t **buffer, uint32_t buffer_num_channels, uint32_t buffer_num_samples, 
