@@ -80,20 +80,21 @@ static void AADEncoderTest_CalculateBlockSizeTest(void *obj)
   }
 }
 
-/* ヘッダエンコードデコードテスト */
+/* ヘッダエンコードテスト */
 static void AADEncoderTest_HeaderEncodeTest(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
 
   /* 有効なヘッダをセット */
-#define AAD_SetValidHeader(p_header) {                          \
-  struct AADHeaderInfo *header__p = p_header;                   \
-  header__p->num_channels           = 1;                        \
-  header__p->sampling_rate          = 44100;                    \
-  header__p->block_size             = 32;                       \
-  header__p->bits_per_sample        = AAD_MAX_BITS_PER_SAMPLE;  \
-  header__p->num_samples            = 1024;                     \
-  header__p->num_samples_per_block  = 32;                       \
+#define AAD_SetValidHeader(p_header) {                            \
+  struct AADHeaderInfo *header__p = p_header;                     \
+  header__p->num_channels           = 1;                          \
+  header__p->sampling_rate          = 44100;                      \
+  header__p->block_size             = 32;                         \
+  header__p->bits_per_sample        = AAD_MAX_BITS_PER_SAMPLE;    \
+  header__p->num_samples            = 1024;                       \
+  header__p->num_samples_per_block  = 32;                         \
+  header__p->ch_process_method      = AAD_CH_PROCESS_METHOD_NONE; \
 }
 
   /* ヘッダエンコード成功ケース */
@@ -164,6 +165,17 @@ static void AADEncoderTest_HeaderEncodeTest(void *obj)
     AAD_SetValidHeader(&header);
     header.num_samples_per_block = 0;
     Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
+
+    /* 異常なチャンネル処理法 */
+    AAD_SetValidHeader(&header);
+    header.ch_process_method = AAD_CH_PROCESS_METHOD_INVALID;
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
+
+    /* チャンネル処理法とチャンネル数指定の組み合わせがおかしい */
+    AAD_SetValidHeader(&header);
+    header.num_channels = 1;
+    header.ch_process_method = AAD_CH_PROCESS_METHOD_MS;
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, data, sizeof(data)), AAD_APIRESULT_INVALID_FORMAT);
   }
 
 }
@@ -177,8 +189,11 @@ static void AADEncoderTest_CreateDestroyTest(void *obj)
   {
     int32_t work_size;
 
-    work_size = AADEncoder_CalculateWorkSize();
+    work_size = AADEncoder_CalculateWorkSize(1024);
     Test_AssertCondition(work_size >= (int32_t)sizeof(struct AADEncoder));
+
+    work_size = AADEncoder_CalculateWorkSize(0);
+    Test_AssertEqual(work_size, -1);
   }
 
   /* ワーク領域渡しによるハンドル作成（成功例） */
@@ -187,13 +202,14 @@ static void AADEncoderTest_CreateDestroyTest(void *obj)
     int32_t work_size;
     struct AADEncoder *encoder;
 
-    work_size = AADEncoder_CalculateWorkSize();
+    work_size = AADEncoder_CalculateWorkSize(1024);
     work = malloc(work_size);
 
-    encoder = AADEncoder_Create(work, work_size);
+    encoder = AADEncoder_Create(1024, work, work_size);
     Test_AssertCondition(encoder != NULL);
     Test_AssertCondition(encoder->work == work);
     Test_AssertCondition(encoder->set_parameter == 0);
+    Test_AssertCondition(encoder->input_buffer != NULL);
     Test_AssertCondition(encoder->alloced_by_own != 1);
 
     AADEncoder_Destroy(encoder);
@@ -204,12 +220,22 @@ static void AADEncoderTest_CreateDestroyTest(void *obj)
   {
     struct AADEncoder *encoder;
 
-    encoder = AADEncoder_Create(NULL, 0);
+    encoder = AADEncoder_Create(1024, NULL, 0);
     Test_AssertCondition(encoder != NULL);
     Test_AssertCondition(encoder->work != NULL);
+    Test_AssertCondition(encoder->input_buffer != NULL);
     Test_AssertCondition(encoder->alloced_by_own == 1);
 
     AADEncoder_Destroy(encoder);
+  }
+
+  /* 自前確保によるハンドル作成（失敗ケース） */
+  {
+    struct AADEncoder *encoder;
+
+    /* 最大ブロックサイズが0 */
+    encoder = AADEncoder_Create(0, NULL, 0);
+    Test_AssertCondition(encoder == NULL);
   }
 
   /* ワーク領域渡しによるハンドル作成（失敗ケース） */
@@ -218,17 +244,23 @@ static void AADEncoderTest_CreateDestroyTest(void *obj)
     int32_t work_size;
     struct AADEncoder *encoder;
 
-    work_size = AADEncoder_CalculateWorkSize();
+    work_size = AADEncoder_CalculateWorkSize(1024);
     work = malloc(work_size);
 
     /* 引数が不正 */
-    encoder = AADEncoder_Create(NULL, work_size);
+    encoder = AADEncoder_Create(0, work, work_size);
     Test_AssertCondition(encoder == NULL);
-    encoder = AADEncoder_Create(work, 0);
+    encoder = AADEncoder_Create(1024, NULL, work_size);
+    Test_AssertCondition(encoder == NULL);
+    encoder = AADEncoder_Create(1024, work, 0);
     Test_AssertCondition(encoder == NULL);
 
     /* ワークサイズ不足 */
-    encoder = AADEncoder_Create(work, work_size - 1);
+    encoder = AADEncoder_Create(1024, work, work_size - 1);
+    Test_AssertCondition(encoder == NULL);
+
+    /* 最大ブロックサイズが0 */
+    encoder = AADEncoder_Create(0, work, work_size);
     Test_AssertCondition(encoder == NULL);
 
     free(work);
@@ -241,12 +273,13 @@ static void AADEncoderTest_SetEncodeParameterTest(void *obj)
   TEST_UNUSED_PARAMETER(obj);
 
   /* 有効なパラメータをセット */
-#define AAD_SetValidParameter(p_param) {            \
-    struct AADEncodeParameter *p__param = p_param;  \
-    p__param->num_channels    = 1;                  \
-    p__param->sampling_rate   = 8000;               \
-    p__param->bits_per_sample = 4;                  \
-    p__param->max_block_size  = 256;                \
+#define AAD_SetValidParameter(p_param) {                      \
+    struct AADEncodeParameter *p__param = p_param;            \
+    p__param->num_channels    = 1;                            \
+    p__param->sampling_rate   = 8000;                         \
+    p__param->bits_per_sample = 4;                            \
+    p__param->max_block_size  = 256;                          \
+    p__param->ch_process_method = AAD_CH_PROCESS_METHOD_NONE; \
 }
 
   /* 成功例 */
@@ -255,9 +288,9 @@ static void AADEncoderTest_SetEncodeParameterTest(void *obj)
     struct AADEncodeParameter param;
     struct AADHeaderInfo header;
 
-    encoder = AADEncoder_Create(NULL, 0);
-    
     AAD_SetValidParameter(&param);
+    encoder = AADEncoder_Create(param.max_block_size, NULL, 0);
+    
     Test_AssertEqual(AADEncoder_ConvertParameterToHeader(&param, 0, &header), AAD_APIRESULT_OK);
 
     Test_AssertEqual(AADEncoder_SetEncodeParameter(encoder, &param), AAD_APIRESULT_OK);
@@ -272,7 +305,7 @@ static void AADEncoderTest_SetEncodeParameterTest(void *obj)
     struct AADEncoder *encoder;
     struct AADEncodeParameter param;
 
-    encoder = AADEncoder_Create(NULL, 0);
+    encoder = AADEncoder_Create(256, NULL, 0);
 
     /* 引数が不正 */
     AAD_SetValidParameter(&param);

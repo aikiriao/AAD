@@ -6,10 +6,11 @@
 
 /* エンコードパラメータ */
 struct AADEncodeParameter {
-  uint16_t num_channels;          /* チャンネル数                                 */
-  uint32_t sampling_rate;         /* サンプリングレート                           */
-  uint16_t bits_per_sample;       /* サンプルあたりビット数（今の所4で固定）      */
-  uint16_t max_block_size;        /* 最大ブロックサイズ[byte]                     */
+  uint16_t num_channels;          /* チャンネル数                               */
+  uint32_t sampling_rate;         /* サンプリングレート                         */
+  uint16_t bits_per_sample;       /* サンプルあたりビット数（今の所4で固定）    */
+  uint16_t max_block_size;        /* 最大ブロックサイズ[byte]                   */
+  AADChannelProcessMethod ch_process_method;  /* マルチチャンネル処理法         */
 };
 
 /* エンコーダハンドル */
@@ -21,7 +22,7 @@ extern "C" {
 
 /* ブロックサイズとブロックあたりサンプル数の計算 */
 AADApiResult AADEncoder_CalculateBlockSize(
-    uint32_t max_block_size, uint16_t num_channels, uint32_t bits_per_sample,
+    uint16_t max_block_size, uint16_t num_channels, uint32_t bits_per_sample,
     uint16_t *block_size, uint32_t *num_samples_per_block);
 
 /* ヘッダエンコード */
@@ -29,10 +30,10 @@ AADApiResult AADEncoder_EncodeHeader(
     const struct AADHeaderInfo *header_info, uint8_t *data, uint32_t data_size);
 
 /* エンコーダワークサイズ計算 */
-int32_t AADEncoder_CalculateWorkSize(void);
+int32_t AADEncoder_CalculateWorkSize(uint16_t max_block_size);
 
 /* エンコーダハンドル作成 */
-struct AADEncoder *AADEncoder_Create(void *work, int32_t work_size);
+struct AADEncoder *AADEncoder_Create(uint16_t max_block_size, void *work, int32_t work_size);
 
 /* エンコーダハンドル破棄 */
 void AADEncoder_Destroy(struct AADEncoder *encoder);

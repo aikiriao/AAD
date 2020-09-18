@@ -9,11 +9,14 @@
 /* 処理可能な最大チャンネル数 */
 #define AAD_MAX_NUM_CHANNELS        2
 
+/* 最小のサンプルあたりビット数 */
+#define AAD_MIN_BITS_PER_SAMPLE     1
+
 /* 最大のサンプルあたりビット数 */
 #define AAD_MAX_BITS_PER_SAMPLE     4
 
 /* ヘッダサイズ[byte] */
-#define AAD_HEADER_SIZE             26
+#define AAD_HEADER_SIZE             27
 
 /* API結果型 */
 typedef enum AADApiResultTag {
@@ -26,14 +29,22 @@ typedef enum AADApiResultTag {
   AAD_APIRESULT_NG                   /* 分類不能な失敗               */
 } AADApiResult; 
 
+/* マルチチャンネル処理法 */
+typedef enum AADChannelProcessMethodTag {
+  AAD_CH_PROCESS_METHOD_NONE = 0,  /* 何もしない     */
+  AAD_CH_PROCESS_METHOD_MS,        /* ステレオMS処理 */
+  AAD_CH_PROCESS_METHOD_INVALID    /* 無効値         */
+} AADChannelProcessMethod;
+
 /* ヘッダ情報 */
 struct AADHeaderInfo {
-  uint16_t num_channels;          /* チャンネル数                                 */
-  uint32_t num_samples;           /* 1チャンネルあたり総サンプル数                */
-  uint32_t sampling_rate;         /* サンプリングレート                           */
-  uint16_t bits_per_sample;       /* サンプルあたりビット数                       */
-  uint16_t block_size;            /* ブロックサイズ                               */
-  uint32_t num_samples_per_block; /* ブロックあたりサンプル数                     */
+  uint16_t num_channels;                      /* チャンネル数                   */
+  uint32_t num_samples;                       /* 1チャンネルあたり総サンプル数  */
+  uint32_t sampling_rate;                     /* サンプリングレート             */
+  uint16_t bits_per_sample;                   /* サンプルあたりビット数         */
+  uint16_t block_size;                        /* ブロックサイズ                 */
+  uint32_t num_samples_per_block;             /* ブロックあたりサンプル数       */
+  AADChannelProcessMethod ch_process_method;  /* マルチチャンネル処理法         */
 };
 
 #endif /* AAD_H_INCLDED */

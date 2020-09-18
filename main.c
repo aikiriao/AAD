@@ -17,7 +17,7 @@
 #include <math.h>
 
 /* バージョン文字列 */
-#define AADCUI_VERSION_STRING  "1.2.1"
+#define AADCUI_VERSION_STRING  "1.3.0"
 
 /* コマンドライン仕様 */
 static struct CommandLineParserSpecification command_line_spec[] = {
@@ -26,6 +26,9 @@ static struct CommandLineParserSpecification command_line_spec[] = {
     NULL, COMMAND_LINE_PARSER_FALSE },
   { 'd', "decode", COMMAND_LINE_PARSER_FALSE, 
     "Decode mode (.aad file -> wav file)", 
+    NULL, COMMAND_LINE_PARSER_FALSE },
+  { 'i', "information", COMMAND_LINE_PARSER_FALSE, 
+    "Show information of encoded .aad file", 
     NULL, COMMAND_LINE_PARSER_FALSE },
   { 'r', "reconstruct", COMMAND_LINE_PARSER_FALSE, 
     "Reconstruction mode (wav file -> (encode -> decode) -> decoded wav file)",
@@ -42,6 +45,9 @@ static struct CommandLineParserSpecification command_line_spec[] = {
   { 's', "max-block-size", COMMAND_LINE_PARSER_TRUE, 
     "Specify max block size (default: 1024)", 
     "1024", COMMAND_LINE_PARSER_FALSE },
+  { 'm', "ms-conversion", COMMAND_LINE_PARSER_FALSE, 
+    "Switch to use LR to MS conversion (default: no)", 
+    NULL, COMMAND_LINE_PARSER_FALSE },
   { 'h', "help", COMMAND_LINE_PARSER_FALSE, 
     "Show help message", 
     NULL, COMMAND_LINE_PARSER_FALSE },
@@ -132,7 +138,8 @@ static int execute_decode(const char *adpcm_filename, const char *decoded_filena
 }
 
 /* エンコード処理 */
-static int execute_encode(const char *wav_file, const char *encoded_filename, uint8_t bits_per_sample, uint16_t max_block_size)
+static int execute_encode(
+    const char *wav_file, const char *encoded_filename, const struct AADEncodeParameter *encode_paramemter)
 {
   FILE                      *fp;
   struct WAVFile            *wavfile;
@@ -172,13 +179,14 @@ static int execute_encode(const char *wav_file, const char *encoded_filename, ui
   }
 
   /* ハンドル作成 */
-  encoder = AADEncoder_Create(NULL, 0);
+  encoder = AADEncoder_Create(encode_paramemter->max_block_size, NULL, 0);
 
   /* エンコードパラメータをセット */
-  enc_param.num_channels    = (uint16_t)num_channels;
-  enc_param.sampling_rate   = wavfile->format.sampling_rate;
-  enc_param.bits_per_sample = bits_per_sample;
-  enc_param.max_block_size  = max_block_size;
+  enc_param.num_channels      = (uint16_t)num_channels;
+  enc_param.sampling_rate     = wavfile->format.sampling_rate;
+  enc_param.bits_per_sample   = encode_paramemter->bits_per_sample;
+  enc_param.max_block_size    = encode_paramemter->max_block_size;
+  enc_param.ch_process_method = encode_paramemter->ch_process_method;
   if ((api_result = AADEncoder_SetEncodeParameter(encoder, &enc_param))
       != AAD_APIRESULT_OK) {
     fprintf(stderr, "Failed to set encode parameter. Please check encode parameter. \n");
@@ -216,8 +224,51 @@ static int execute_encode(const char *wav_file, const char *encoded_filename, ui
   return 0;
 }
 
+/* ヘッダ情報の表示 */
+static int execute_information(const char *adpcm_filename)
+{
+  FILE                  *fp;
+  uint8_t               buffer[AAD_HEADER_SIZE];
+  struct AADHeaderInfo  header;
+  AADApiResult          ret;
+
+  /* ファイルオープン */
+  fp = fopen(adpcm_filename, "rb");
+  if (fp == NULL) {
+    fprintf(stderr, "Failed to open %s. \n", adpcm_filename);
+    return 1;
+  }
+
+  /* ヘッダだけ読み込み */
+  if (fread(buffer, sizeof(uint8_t), AAD_HEADER_SIZE, fp) < AAD_HEADER_SIZE) {
+    fprintf(stderr, "Failed to read from %s. \n", adpcm_filename);
+    fclose(fp);
+    return 1;
+  }
+  fclose(fp);
+
+  /* ヘッダデコード */
+  if ((ret = AADDecoder_DecodeHeader(buffer, AAD_HEADER_SIZE, &header))
+      != AAD_APIRESULT_OK) {
+    fprintf(stderr, "Failed to read header. API result: %d \n", ret);
+    return 1;
+  }
+
+  /* ヘッダ情報表示 */
+  printf("Number of Channels: %d \n",             header.num_channels);
+  printf("Number of Samples per Channel: %d \n",  header.num_samples);
+  printf("Sampling Rate: %d \n",                  header.sampling_rate);
+  printf("Bits per Sample: %d \n",                header.bits_per_sample);
+  printf("Block size: %d \n",                     header.block_size);
+  printf("Number of Samples per Block: %d \n",    header.num_samples_per_block);
+  printf("Method of Channel Processing : %d \n",  header.ch_process_method);
+
+  return 0;
+}
+
 /* 再構成コア処理 */
-static int execute_reconstruction_core(const struct WAVFile *in_wav, int32_t **decoded, uint8_t bits_per_sample, uint16_t max_block_size)
+static int execute_reconstruction_core(
+    const struct WAVFile *in_wav, int32_t **decoded, const struct AADEncodeParameter *encode_paramemter)
 {
   int32_t                   *pcmdata[AAD_MAX_NUM_CHANNELS];
   uint32_t                  ch, smpl, buffer_size, output_size;
@@ -247,14 +298,15 @@ static int execute_reconstruction_core(const struct WAVFile *in_wav, int32_t **d
   }
 
   /* ハンドル作成 */
-  encoder = AADEncoder_Create(NULL, 0);
+  encoder = AADEncoder_Create(encode_paramemter->max_block_size, NULL, 0);
   decoder = AADDecoder_Create(NULL, 0);
 
   /* エンコードパラメータをセット */
-  enc_param.num_channels    = (uint16_t)num_channels;
-  enc_param.sampling_rate   = in_wav->format.sampling_rate;
-  enc_param.bits_per_sample = bits_per_sample;
-  enc_param.max_block_size  = max_block_size;
+  enc_param.num_channels      = (uint16_t)num_channels;
+  enc_param.sampling_rate     = in_wav->format.sampling_rate;
+  enc_param.bits_per_sample   = encode_paramemter->bits_per_sample;
+  enc_param.max_block_size    = encode_paramemter->max_block_size;
+  enc_param.ch_process_method = encode_paramemter->ch_process_method;
   if ((api_result = AADEncoder_SetEncodeParameter(encoder, &enc_param))
       != AAD_APIRESULT_OK) {
     fprintf(stderr, "Failed to set encode parameter. Please check encode parameter. \n");
@@ -288,7 +340,8 @@ static int execute_reconstruction_core(const struct WAVFile *in_wav, int32_t **d
 }
 
 /* 再構成処理 */
-static int execute_reconstruction(const char *wav_file, const char *reconstruct_file, uint8_t bits_per_sample, uint16_t max_block_size)
+static int execute_reconstruction(
+    const char *wav_file, const char *reconstruct_file, const struct AADEncodeParameter *encode_paramemter)
 {
   int             ret;
   struct WAVFile  *wavfile;
@@ -312,7 +365,7 @@ static int execute_reconstruction(const char *wav_file, const char *reconstruct_
   }
 
   /* 再構成処理実行 */
-  if ((ret = execute_reconstruction_core(wavfile, pcmdata, bits_per_sample, max_block_size)) != 0) {
+  if ((ret = execute_reconstruction_core(wavfile, pcmdata, encode_paramemter)) != 0) {
     return ret;
   }
 
@@ -330,7 +383,8 @@ static int execute_reconstruction(const char *wav_file, const char *reconstruct_
 }
 
 /* 残差出力処理 */
-static int execute_gap(const char *wav_file, const char *gap_file, uint8_t bits_per_sample, uint16_t max_block_size)
+static int execute_gap(
+    const char *wav_file, const char *gap_file, const struct AADEncodeParameter *encode_paramemter)
 {
   int             ret;
   struct WAVFile  *wavfile;
@@ -354,7 +408,7 @@ static int execute_gap(const char *wav_file, const char *gap_file, uint8_t bits_
   }
 
   /* 再構成処理実行 */
-  if ((ret = execute_reconstruction_core(wavfile, pcmdata, bits_per_sample, max_block_size)) != 0) {
+  if ((ret = execute_reconstruction_core(wavfile, pcmdata, encode_paramemter)) != 0) {
     return ret;
   }
 
@@ -372,14 +426,14 @@ static int execute_gap(const char *wav_file, const char *gap_file, uint8_t bits_
 }
 
 /* 統計情報出力 */
-static int execute_calculation(const char *wav_file, uint8_t bits_per_sample, uint16_t max_block_size)
+static int execute_calculation(const char *wav_file, const struct AADEncodeParameter *encode_paramemter)
 {
   int             ret;
   struct WAVFile  *wavfile;
   int32_t         *pcmdata[AAD_MAX_NUM_CHANNELS];
   uint32_t        ch, smpl;
   uint32_t        num_channels, num_samples;
-  double          rms_error, max_error;
+  double          rms_error, max_error, abs_error;
 
   /* 入力wav取得 */
   wavfile = WAV_CreateFromFile(wav_file);
@@ -397,7 +451,7 @@ static int execute_calculation(const char *wav_file, uint8_t bits_per_sample, ui
   }
 
   /* 再構成処理実行 */
-  if ((ret = execute_reconstruction_core(wavfile, pcmdata, bits_per_sample, max_block_size)) != 0) {
+  if ((ret = execute_reconstruction_core(wavfile, pcmdata, encode_paramemter)) != 0) {
     return ret;
   }
 
@@ -411,19 +465,24 @@ static int execute_calculation(const char *wav_file, uint8_t bits_per_sample, ui
   /* 統計情報計算 */
   rms_error = 0.0f;
   max_error = 0.0f;
+  abs_error = 0.0f;
   for (ch = 0; ch < num_channels; ch++) {
     for (smpl = 0; smpl < num_samples; smpl++) {
       double pcm1, pcm2;
       pcm1 = (double)WAVFile_PCM(wavfile, smpl, ch) / INT32_MAX;
       pcm2 = (double)pcmdata[ch][smpl] / INT32_MAX;
       rms_error += pow(pcm1 - pcm2, 2);
+      abs_error += fabs(pcm1 - pcm2);
       if (max_error < fabs(pcm1 - pcm2)) {
         max_error = fabs(pcm1 - pcm2);
       }
     }
   }
 
-  printf("RMSE:%f MaxAbsError:%f \n", sqrt(rms_error / (num_channels * num_samples)), max_error);
+  printf("RMSE:%f MSD:%f MaxAE:%f \n", 
+      sqrt(rms_error / (num_channels * num_samples)), 
+      abs_error / (num_channels * num_samples),
+      max_error);
 
   return 0;
 }
@@ -443,14 +502,15 @@ static void print_version_info(void)
 /* メインエントリ */
 int main(int argc, char **argv)
 {
-  int ret = 1;
   uint32_t num_modes_specified;
   const char *filename_ptr[2] = { NULL, NULL };
   const char *in_filename, *out_filename;
+  struct AADEncodeParameter encode_paramemter = { 0, };
 
   /* 引数の数が想定外 */
   if (argc == 1) {
     print_usage(argv[0]);
+    printf("type `%s -h` to display usage. \n", argv[0]);
     return 1;
   }
 
@@ -476,6 +536,7 @@ int main(int argc, char **argv)
   num_modes_specified
     = CommandLineParser_GetOptionAcquired(command_line_spec, "decode")
     + CommandLineParser_GetOptionAcquired(command_line_spec, "encode")
+    + CommandLineParser_GetOptionAcquired(command_line_spec, "information")
     + CommandLineParser_GetOptionAcquired(command_line_spec, "reconstruct")
     + CommandLineParser_GetOptionAcquired(command_line_spec, "gap")
     + CommandLineParser_GetOptionAcquired(command_line_spec, "calculate");
@@ -498,15 +559,27 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  /* 統計情報出力 */
-  if (CommandLineParser_GetOptionAcquired(command_line_spec, "calculate") == COMMAND_LINE_PARSER_TRUE) {
-    /* 統計情報出力 */
-    uint8_t   bits_per_sample;
-    uint16_t  max_block_size;
-    bits_per_sample = (uint8_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "bits-per-sample"), NULL, 10);
-    max_block_size  = (uint16_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "max-block-size"), NULL, 10);
-    return execute_calculation(in_filename, bits_per_sample, max_block_size);
+  /* エンコードパラメータの取得 */
+  if ((CommandLineParser_GetOptionAcquired(command_line_spec, "decode") == COMMAND_LINE_PARSER_FALSE)
+      && (CommandLineParser_GetOptionAcquired(command_line_spec, "information") == COMMAND_LINE_PARSER_FALSE)) {
+    encode_paramemter.bits_per_sample
+      = (uint8_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "bits-per-sample"), NULL, 10);
+    encode_paramemter.max_block_size
+      = (uint16_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "max-block-size"), NULL, 10);
+    encode_paramemter.ch_process_method = AAD_CH_PROCESS_METHOD_NONE;
+    if (CommandLineParser_GetOptionAcquired(command_line_spec, "ms-conversion") == COMMAND_LINE_PARSER_TRUE) {
+      encode_paramemter.ch_process_method = AAD_CH_PROCESS_METHOD_MS;
+    }
   }
+
+  /* 入力だけが必要な処理 */
+  if (CommandLineParser_GetOptionAcquired(command_line_spec, "information") == COMMAND_LINE_PARSER_TRUE) {
+    /* ヘッダ情報表示 */
+    return execute_information(in_filename);
+  } else if (CommandLineParser_GetOptionAcquired(command_line_spec, "calculate") == COMMAND_LINE_PARSER_TRUE) {
+    /* 統計情報出力 */
+    return execute_calculation(in_filename, &encode_paramemter);
+  } 
   
   /* 出力ファイル名の取得 */
   if ((out_filename = filename_ptr[1]) == NULL) {
@@ -514,32 +587,20 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  /* 処理呼び分け */
+  /* 入出力が必要な処理 */
   if (CommandLineParser_GetOptionAcquired(command_line_spec, "decode") == COMMAND_LINE_PARSER_TRUE) {
     /* デコード */
-    ret = execute_decode(in_filename, out_filename);
+    return execute_decode(in_filename, out_filename);
   } else if (CommandLineParser_GetOptionAcquired(command_line_spec, "encode") == COMMAND_LINE_PARSER_TRUE) {
     /* エンコード */
-    uint8_t   bits_per_sample;
-    uint16_t  max_block_size;
-    bits_per_sample = (uint8_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "bits-per-sample"), NULL, 10);
-    max_block_size  = (uint16_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "max-block-size"), NULL, 10);
-    ret = execute_encode(in_filename, out_filename, bits_per_sample, max_block_size);
+    return execute_encode(in_filename, out_filename, &encode_paramemter);
   } else if (CommandLineParser_GetOptionAcquired(command_line_spec, "reconstruct") == COMMAND_LINE_PARSER_TRUE) {
     /* 再構成 */
-    uint8_t   bits_per_sample;
-    uint16_t  max_block_size;
-    bits_per_sample = (uint8_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "bits-per-sample"), NULL, 10);
-    max_block_size  = (uint16_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "max-block-size"), NULL, 10);
-    ret = execute_reconstruction(in_filename, out_filename, bits_per_sample, max_block_size);
+    return execute_reconstruction(in_filename, out_filename, &encode_paramemter);
   } else if (CommandLineParser_GetOptionAcquired(command_line_spec, "gap") == COMMAND_LINE_PARSER_TRUE) {
     /* 残差生成 */
-    uint8_t   bits_per_sample;
-    uint16_t  max_block_size;
-    bits_per_sample = (uint8_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "bits-per-sample"), NULL, 10);
-    max_block_size  = (uint16_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "max-block-size"), NULL, 10);
-    ret = execute_gap(in_filename, out_filename, bits_per_sample, max_block_size);
+    return execute_gap(in_filename, out_filename, &encode_paramemter);
   }
 
-  return ret;
+  return 1;
 }

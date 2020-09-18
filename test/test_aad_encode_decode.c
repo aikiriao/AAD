@@ -34,14 +34,15 @@ static void AADEncodeDecodeTest_EncodeDecodeHeaderTest(void *obj)
   TEST_UNUSED_PARAMETER(obj);
 
   /* 有効なヘッダをセット */
-#define AAD_SetValidHeader(p_header) {                          \
-  struct AADHeaderInfo *header__p = p_header;                   \
-  header__p->num_channels           = 1;                        \
-  header__p->sampling_rate          = 44100;                    \
-  header__p->block_size             = 32;                       \
-  header__p->bits_per_sample        = AAD_MAX_BITS_PER_SAMPLE;  \
-  header__p->num_samples            = 1024;                     \
-  header__p->num_samples_per_block  = 32;                       \
+#define AAD_SetValidHeader(p_header) {                            \
+  struct AADHeaderInfo *header__p = p_header;                     \
+  header__p->num_channels           = 1;                          \
+  header__p->sampling_rate          = 44100;                      \
+  header__p->block_size             = 32;                         \
+  header__p->bits_per_sample        = AAD_MAX_BITS_PER_SAMPLE;    \
+  header__p->num_samples            = 1024;                       \
+  header__p->num_samples_per_block  = 32;                         \
+  header__p->ch_process_method      = AAD_CH_PROCESS_METHOD_NONE; \
 }
 
   /* 成功例 */
@@ -62,6 +63,7 @@ static void AADEncodeDecodeTest_EncodeDecodeHeaderTest(void *obj)
     Test_AssertEqual(header.bits_per_sample,        tmp_header.bits_per_sample);
     Test_AssertEqual(header.num_samples,            tmp_header.num_samples);
     Test_AssertEqual(header.num_samples_per_block,  tmp_header.num_samples_per_block);
+    Test_AssertEqual(header.ch_process_method,      tmp_header.ch_process_method);
   }
 
 }
@@ -70,7 +72,8 @@ static void AADEncodeDecodeTest_EncodeDecodeHeaderTest(void *obj)
 static uint8_t AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(
     int32_t **input, 
     uint32_t num_channels, uint32_t num_samples,
-    uint16_t bits_per_sample, uint16_t block_size, double rms_epsilon)
+    uint16_t bits_per_sample, uint16_t block_size, AADChannelProcessMethod ch_process_method,
+    double rms_epsilon)
 {
   int32_t *decoded[AAD_MAX_NUM_CHANNELS];
   uint32_t ch, smpl, buffer_size, output_size;
@@ -101,14 +104,15 @@ static uint8_t AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(
   }
 
   /* ハンドル作成 */
-  encoder = AADEncoder_Create(NULL, 0);
+  encoder = AADEncoder_Create(block_size, NULL, 0);
   decoder = AADDecoder_Create(NULL, 0);
 
   /* エンコードパラメータをセット */
-  enc_param.num_channels    = num_channels;
-  enc_param.sampling_rate   = 8000;
-  enc_param.bits_per_sample = bits_per_sample;
-  enc_param.max_block_size  = block_size;
+  enc_param.num_channels        = num_channels;
+  enc_param.sampling_rate       = 8000;
+  enc_param.bits_per_sample     = bits_per_sample;
+  enc_param.max_block_size      = block_size;
+  enc_param.ch_process_method   = ch_process_method;
   if (AADEncoder_SetEncodeParameter(encoder, &enc_param) != AAD_APIRESULT_OK) {
     is_ok = 0;
     goto CHECK_END;
@@ -148,6 +152,7 @@ static uint8_t AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(
 
   /* 誤差チェック */
   if (rms_error >= rms_epsilon) {
+    printf("%f \n", rms_error);
     is_ok = 0;
     goto CHECK_END;
   }
@@ -169,7 +174,9 @@ CHECK_END:
 
 /* エンコード→デコードチェックルーチン 成功時は1, 失敗時は0を返す */
 static uint8_t AADEncodeDecodeTest_EncodeDecodeCheckForWavFile(
-    const char *wav_filename, uint16_t bits_per_sample, uint16_t block_size, double rms_epsilon)
+    const char *wav_filename, 
+    uint16_t bits_per_sample, uint16_t block_size, AADChannelProcessMethod ch_process_method,
+    double rms_epsilon)
 {
   struct WAVFile *wavfile;
   struct stat fstat;
@@ -210,14 +217,15 @@ static uint8_t AADEncodeDecodeTest_EncodeDecodeCheckForWavFile(
   }
 
   /* ハンドル作成 */
-  encoder = AADEncoder_Create(NULL, 0);
+  encoder = AADEncoder_Create(block_size, NULL, 0);
   decoder = AADDecoder_Create(NULL, 0);
 
   /* エンコードパラメータをセット */
-  enc_param.num_channels    = num_channels;
-  enc_param.sampling_rate   = wavfile->format.sampling_rate;
-  enc_param.bits_per_sample = bits_per_sample;
-  enc_param.max_block_size  = block_size;
+  enc_param.num_channels      = num_channels;
+  enc_param.sampling_rate     = wavfile->format.sampling_rate;
+  enc_param.bits_per_sample   = bits_per_sample;
+  enc_param.max_block_size    = block_size;
+  enc_param.ch_process_method = ch_process_method;
   if (AADEncoder_SetEncodeParameter(encoder, &enc_param) != AAD_APIRESULT_OK) {
     is_ok = 0;
     goto CHECK_END;
@@ -288,8 +296,84 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
   {
 #define MAX_NUM_CHANNELS  AAD_MAX_NUM_CHANNELS
 #define MAX_NUM_SAMPLES   2048
+    /* テストケース */
+    struct EncodeDecodeTestForPcmDataTestCase {
+      uint32_t                num_channels;
+      uint32_t                num_samples;
+      uint16_t                bits_per_sample;
+      uint16_t                block_size;
+      AADChannelProcessMethod ch_process_method;
+      double                  rms_epsilon;
+    };
     int32_t *input[MAX_NUM_CHANNELS];
-    uint32_t ch, smpl;
+    uint32_t ch, smpl, i;
+    uint8_t is_ok;
+
+    /* 正弦波向けテストケースリスト */
+    const struct EncodeDecodeTestForPcmDataTestCase test_case_for_sin[] = {
+      { 1, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { 1, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { 1, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { 1, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { 1, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { 1, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+    };
+
+    /* 白色雑音向けテストケースリスト */
+    const struct EncodeDecodeTestForPcmDataTestCase test_case_for_white_noise[] = {
+      { 1, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1.0e-1 },
+      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1.0e-1 },
+      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_MS,   1.0e-1 },
+      { 1, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1.0e-1 },
+      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1.0e-1 },
+      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   1.0e-1 },
+      { 1, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1.5e-1 },
+      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1.5e-1 },
+      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_MS,   1.5e-1 },
+      { 1, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1.5e-1 },
+      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1.5e-1 },
+      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   1.5e-1 },
+      { 1, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 2.4e-1 },
+      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 2.4e-1 },
+      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_MS,   2.4e-1 },
+      { 1, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 2.4e-1 },
+      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 2.4e-1 },
+      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   2.4e-1 },
+    };
+
+    /* ナイキスト振動波向けテストケースリスト */
+    const struct EncodeDecodeTestForPcmDataTestCase test_case_for_nyquist[] = {
+      { 1, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1.2e-1 },
+      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1.2e-1 },
+      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_MS,   1.2e-1 },
+      { 1, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1.2e-1 },
+      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1.2e-1 },
+      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   1.2e-1 },
+      { 1, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1.6e-1 },
+      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1.6e-1 },
+      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_MS,   1.6e-1 },
+      { 1, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1.6e-1 },
+      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1.6e-1 },
+      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   1.6e-1 },
+      { 1, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 2.3e-1 },
+      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 2.3e-1 },
+      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_MS,   2.3e-1 },
+      { 1, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 2.3e-1 },
+      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 2.3e-1 },
+      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   2.3e-1 },
+    };
 
     /* 出力データの領域割当て */
     for (ch = 0; ch < MAX_NUM_CHANNELS; ch++) {
@@ -303,19 +387,18 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
       }
     }
     
-    /* チェック関数の実行 */
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 4,  128, 5.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 4,  128, 5.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 4, 1024, 5.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 4, 1024, 5.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 3,  128, 6.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 3,  128, 6.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 3, 1024, 6.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 3, 1024, 6.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 2,  128, 8.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 2,  128, 8.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 2, 1024, 8.0e-2), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 2, 1024, 8.0e-2), 1);
+    /* 定義済みテストケースに対してテスト */
+    is_ok = 1;
+    for (i = 0; i < sizeof(test_case_for_sin) / sizeof(test_case_for_sin[0]); i++) {
+      const struct EncodeDecodeTestForPcmDataTestCase *pcase = &test_case_for_sin[i];
+      if (AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 
+            pcase->num_channels, pcase->num_samples, pcase->bits_per_sample,
+            pcase->block_size, pcase->ch_process_method, pcase->rms_epsilon) != 1) {
+        is_ok = 0;
+        break;
+      }
+    }
+    Test_AssertEqual(is_ok, 1);
 
     /* 白色雑音作成 */
     srand(0);
@@ -325,19 +408,18 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
       }
     }
     
-    /* チェック */
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 4,  128, 1.0e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 4,  128, 1.0e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 4, 1024, 1.0e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 4, 1024, 1.0e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 3,  128, 1.5e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 3,  128, 1.5e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 3, 1024, 1.5e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 3, 1024, 1.5e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 2,  128, 2.4e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 2,  128, 2.4e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 2, 1024, 2.4e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 2, 1024, 2.4e-1), 1);
+    /* 定義済みテストケースに対してテスト */
+    is_ok = 1;
+    for (i = 0; i < sizeof(test_case_for_white_noise) / sizeof(test_case_for_white_noise[0]); i++) {
+      const struct EncodeDecodeTestForPcmDataTestCase *pcase = &test_case_for_white_noise[i];
+      if (AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 
+            pcase->num_channels, pcase->num_samples, pcase->bits_per_sample,
+            pcase->block_size, pcase->ch_process_method, pcase->rms_epsilon) != 1) {
+        is_ok = 0;
+        break;
+      }
+    }
+    Test_AssertEqual(is_ok, 1);
 
     /* ナイキストレート振動波 */
     for (ch = 0; ch < MAX_NUM_CHANNELS; ch++) {
@@ -346,19 +428,18 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
       }
     }
     
-    /* チェック */
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 4,  128, 1.2e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 4,  128, 1.2e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 4, 1024, 1.2e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 4, 1024, 1.2e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 3,  128, 1.6e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 3,  128, 1.6e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 3, 1024, 1.6e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 3, 1024, 1.6e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 2,  128, 2.3e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 2,  128, 2.3e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 1, MAX_NUM_SAMPLES, 2, 1024, 2.3e-1), 1);
-    Test_AssertEqual(AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 2, MAX_NUM_SAMPLES, 2, 1024, 2.3e-1), 1);
+    /* 定義済みテストケースに対してテスト */
+    is_ok = 1;
+    for (i = 0; i < sizeof(test_case_for_nyquist) / sizeof(test_case_for_nyquist[0]); i++) {
+      const struct EncodeDecodeTestForPcmDataTestCase *pcase = &test_case_for_nyquist[i];
+      if (AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 
+            pcase->num_channels, pcase->num_samples, pcase->bits_per_sample,
+            pcase->block_size, pcase->ch_process_method, pcase->rms_epsilon) != 1) {
+        is_ok = 0;
+        break;
+      }
+    }
+    Test_AssertEqual(is_ok, 1);
 
     for (ch = 0; ch < MAX_NUM_CHANNELS; ch++) {
       free(input[ch]);
@@ -374,50 +455,122 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
 
     /* テストケース */
     struct EncodeDecodeTestForWavFileTestCase {
-      const char  *filename;
-      uint16_t    bits_per_sample;
-      uint16_t    block_size;
-      double      rms_epsilon;
+      const char              *filename;
+      uint16_t                bits_per_sample;
+      uint16_t                block_size;
+      AADChannelProcessMethod ch_process_method;
+      double                  rms_epsilon;
     };
 
     /* テストケースリスト */
     const struct EncodeDecodeTestForWavFileTestCase test_case[] = {
-      { "unit_impulse_mono.wav", 4,  128, 5.0e-2 }, { "unit_impulse_mono.wav", 4,  256, 5.0e-2 },
-      { "unit_impulse_mono.wav", 4, 1024, 5.0e-2 }, { "unit_impulse_mono.wav", 4, 4096, 5.0e-2 },
-      { "unit_impulse.wav",      4,  128, 5.0e-2 }, { "unit_impulse.wav",      4,  256, 5.0e-2 },
-      { "unit_impulse.wav",      4, 1024, 5.0e-2 }, { "unit_impulse.wav",      4, 4096, 5.0e-2 },
-      { "sin300Hz_mono.wav",     4,  128, 5.0e-2 }, { "sin300Hz_mono.wav",     4,  256, 5.0e-2 },
-      { "sin300Hz_mono.wav",     4, 1024, 5.0e-2 }, { "sin300Hz_mono.wav",     4, 4096, 5.0e-2 },
-      { "sin300Hz.wav",          4,  128, 5.0e-2 }, { "sin300Hz.wav",          4,  256, 5.0e-2 },
-      { "sin300Hz.wav",          4, 1024, 5.0e-2 }, { "sin300Hz.wav",          4, 4096, 5.0e-2 },
-      { "bunny1.wav",            4,  128, 5.0e-2 }, { "bunny1.wav",            4,  256, 5.0e-2 },
-      { "bunny1.wav",            4, 1024, 5.0e-2 }, { "bunny1.wav",            4, 4096, 5.0e-2 },
-      { "pi_15-25sec.wav",       4,  128, 5.0e-2 }, { "pi_15-25sec.wav",       4,  256, 5.0e-2 },
-      { "pi_15-25sec.wav",       4, 1024, 5.0e-2 }, { "pi_15-25sec.wav",       4, 4096, 5.0e-2 },
-      { "unit_impulse_mono.wav", 3,  128, 6.0e-2 }, { "unit_impulse_mono.wav", 3,  256, 6.0e-2 },
-      { "unit_impulse_mono.wav", 3, 1024, 6.0e-2 }, { "unit_impulse_mono.wav", 3, 4096, 6.0e-2 },
-      { "unit_impulse.wav",      3,  128, 6.0e-2 }, { "unit_impulse.wav",      3,  256, 6.0e-2 },
-      { "unit_impulse.wav",      3, 1024, 6.0e-2 }, { "unit_impulse.wav",      3, 4096, 6.0e-2 },
-      { "sin300Hz_mono.wav",     3,  128, 6.0e-2 }, { "sin300Hz_mono.wav",     3,  256, 6.0e-2 },
-      { "sin300Hz_mono.wav",     3, 1024, 6.0e-2 }, { "sin300Hz_mono.wav",     3, 4096, 6.0e-2 },
-      { "sin300Hz.wav",          3,  128, 6.0e-2 }, { "sin300Hz.wav",          3,  256, 6.0e-2 },
-      { "sin300Hz.wav",          3, 1024, 6.0e-2 }, { "sin300Hz.wav",          3, 4096, 6.0e-2 },
-      { "bunny1.wav",            3,  128, 6.0e-2 }, { "bunny1.wav",            3,  256, 6.0e-2 },
-      { "bunny1.wav",            3, 1024, 6.0e-2 }, { "bunny1.wav",            3, 4096, 6.0e-2 },
-      { "pi_15-25sec.wav",       3,  128, 6.0e-2 }, { "pi_15-25sec.wav",       3,  256, 6.0e-2 },
-      { "pi_15-25sec.wav",       3, 1024, 6.0e-2 }, { "pi_15-25sec.wav",       3, 4096, 6.0e-2 },
-      { "unit_impulse_mono.wav", 2,  128, 8.0e-2 }, { "unit_impulse_mono.wav", 2,  256, 8.0e-2 },
-      { "unit_impulse_mono.wav", 2, 1024, 8.0e-2 }, { "unit_impulse_mono.wav", 2, 4096, 8.0e-2 },
-      { "unit_impulse.wav",      2,  128, 8.0e-2 }, { "unit_impulse.wav",      2,  256, 8.0e-2 },
-      { "unit_impulse.wav",      2, 1024, 8.0e-2 }, { "unit_impulse.wav",      2, 4096, 8.0e-2 },
-      { "sin300Hz_mono.wav",     2,  128, 8.0e-2 }, { "sin300Hz_mono.wav",     2,  256, 8.0e-2 },
-      { "sin300Hz_mono.wav",     2, 1024, 8.0e-2 }, { "sin300Hz_mono.wav",     2, 4096, 8.0e-2 },
-      { "sin300Hz.wav",          2,  128, 8.0e-2 }, { "sin300Hz.wav",          2,  256, 8.0e-2 },
-      { "sin300Hz.wav",          2, 1024, 8.0e-2 }, { "sin300Hz.wav",          2, 4096, 8.0e-2 },
-      { "bunny1.wav",            2,  128, 8.0e-2 }, { "bunny1.wav",            2,  256, 8.0e-2 },
-      { "bunny1.wav",            2, 1024, 8.0e-2 }, { "bunny1.wav",            2, 4096, 8.0e-2 },
-      { "pi_15-25sec.wav",       2,  128, 8.0e-2 }, { "pi_15-25sec.wav",       2,  256, 8.0e-2 },
-      { "pi_15-25sec.wav",       2, 1024, 8.0e-2 }, { "pi_15-25sec.wav",       2, 4096, 8.0e-2 },
+      { "unit_impulse_mono.wav", 4,  128, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "unit_impulse_mono.wav", 4,  256, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "unit_impulse_mono.wav", 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "unit_impulse_mono.wav", 4, 4096, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "unit_impulse.wav",      4,  128, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "unit_impulse.wav",      4,  128, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "unit_impulse.wav",      4,  256, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "unit_impulse.wav",      4,  256, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "unit_impulse.wav",      4, 1024, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "unit_impulse.wav",      4, 1024, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "unit_impulse.wav",      4, 4096, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "unit_impulse.wav",      4, 4096, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "sin300Hz_mono.wav",     4,  128, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "sin300Hz_mono.wav",     4,  256, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "sin300Hz_mono.wav",     4, 1024, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "sin300Hz_mono.wav",     4, 4096, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "sin300Hz.wav",          4,  128, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "sin300Hz.wav",          4,  128, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "sin300Hz.wav",          4,  256, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "sin300Hz.wav",          4,  256, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "sin300Hz.wav",          4, 1024, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "sin300Hz.wav",          4, 1024, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "sin300Hz.wav",          4, 4096, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "sin300Hz.wav",          4, 4096, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "bunny1.wav",            4,  128, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "bunny1.wav",            4,  256, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "bunny1.wav",            4, 1024, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "bunny1.wav",            4, 4096, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "pi_15-25sec.wav",       4,  128, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "pi_15-25sec.wav",       4,  128, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "pi_15-25sec.wav",       4,  256, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "pi_15-25sec.wav",       4,  256, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "pi_15-25sec.wav",       4, 1024, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "pi_15-25sec.wav",       4, 1024, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "pi_15-25sec.wav",       4, 4096, AAD_CH_PROCESS_METHOD_NONE, 5.0e-2 },
+      { "pi_15-25sec.wav",       4, 4096, AAD_CH_PROCESS_METHOD_MS,   5.0e-2 },
+      { "unit_impulse_mono.wav", 3,  128, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "unit_impulse_mono.wav", 3,  256, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "unit_impulse_mono.wav", 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "unit_impulse_mono.wav", 3, 4096, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "unit_impulse.wav",      3,  128, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "unit_impulse.wav",      3,  128, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "unit_impulse.wav",      3,  256, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "unit_impulse.wav",      3,  256, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "unit_impulse.wav",      3, 1024, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "unit_impulse.wav",      3, 1024, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "unit_impulse.wav",      3, 4096, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "unit_impulse.wav",      3, 4096, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "sin300Hz_mono.wav",     3,  128, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "sin300Hz_mono.wav",     3,  256, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "sin300Hz_mono.wav",     3, 1024, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "sin300Hz_mono.wav",     3, 4096, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "sin300Hz.wav",          3,  128, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "sin300Hz.wav",          3,  128, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "sin300Hz.wav",          3,  256, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "sin300Hz.wav",          3,  256, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "sin300Hz.wav",          3, 1024, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "sin300Hz.wav",          3, 1024, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "sin300Hz.wav",          3, 4096, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "sin300Hz.wav",          3, 4096, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "bunny1.wav",            3,  128, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "bunny1.wav",            3,  256, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "bunny1.wav",            3, 1024, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "bunny1.wav",            3, 4096, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "pi_15-25sec.wav",       3,  128, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "pi_15-25sec.wav",       3,  128, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "pi_15-25sec.wav",       3,  256, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "pi_15-25sec.wav",       3,  256, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "pi_15-25sec.wav",       3, 1024, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "pi_15-25sec.wav",       3, 1024, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "pi_15-25sec.wav",       3, 4096, AAD_CH_PROCESS_METHOD_NONE, 6.0e-2 },
+      { "pi_15-25sec.wav",       3, 4096, AAD_CH_PROCESS_METHOD_MS,   6.0e-2 },
+      { "unit_impulse_mono.wav", 2,  128, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "unit_impulse_mono.wav", 2,  256, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "unit_impulse_mono.wav", 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "unit_impulse_mono.wav", 2, 4096, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "unit_impulse.wav",      2,  128, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "unit_impulse.wav",      2,  128, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { "unit_impulse.wav",      2,  256, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "unit_impulse.wav",      2,  256, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { "unit_impulse.wav",      2, 1024, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "unit_impulse.wav",      2, 1024, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { "unit_impulse.wav",      2, 4096, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "unit_impulse.wav",      2, 4096, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { "sin300Hz_mono.wav",     2,  128, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "sin300Hz_mono.wav",     2,  256, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "sin300Hz_mono.wav",     2, 1024, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "sin300Hz_mono.wav",     2, 4096, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "sin300Hz.wav",          2,  128, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "sin300Hz.wav",          2,  128, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { "sin300Hz.wav",          2,  256, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "sin300Hz.wav",          2,  256, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { "sin300Hz.wav",          2, 1024, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "sin300Hz.wav",          2, 1024, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { "sin300Hz.wav",          2, 4096, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "bunny1.wav",            2,  128, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "bunny1.wav",            2,  256, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "bunny1.wav",            2, 1024, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "bunny1.wav",            2, 4096, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "pi_15-25sec.wav",       2,  128, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "pi_15-25sec.wav",       2,  128, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { "pi_15-25sec.wav",       2,  256, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "pi_15-25sec.wav",       2,  256, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { "pi_15-25sec.wav",       2, 1024, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "pi_15-25sec.wav",       2, 1024, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
+      { "pi_15-25sec.wav",       2, 4096, AAD_CH_PROCESS_METHOD_NONE, 8.0e-2 },
+      { "pi_15-25sec.wav",       2, 4096, AAD_CH_PROCESS_METHOD_MS,   8.0e-2 },
     };
     const uint32_t num_test_cases = sizeof(test_case) / sizeof(test_case[0]);
 
@@ -428,10 +581,10 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
       /* 1つでも失敗したら終わる */
       /* ログがうるさくなるのを防ぐため */
       if (AADEncodeDecodeTest_EncodeDecodeCheckForWavFile(pcase->filename,
-            pcase->bits_per_sample, pcase->block_size, pcase->rms_epsilon) != 1) {
+            pcase->bits_per_sample, pcase->block_size, pcase->ch_process_method, pcase->rms_epsilon) != 1) {
         fprintf(stderr,
-            "Encode/Decode Test Failed for %s bps:%d block size:%d RMS epsilon:%e \n",
-            pcase->filename, pcase->bits_per_sample, pcase->block_size, pcase->rms_epsilon);
+            "Encode/Decode Test Failed for %s bps:%d block size:%d Ch process method:%d RMS epsilon:%e \n",
+            pcase->filename, pcase->bits_per_sample, pcase->block_size, pcase->ch_process_method, pcase->rms_epsilon);
         is_ok = 0;
         break;
       }

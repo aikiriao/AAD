@@ -24,7 +24,7 @@ static void AADDecodeProcessor_Reset(struct AADDecodeProcessor *processor);
 
 /* 1サンプルデコード */
 static int32_t AADDecodeProcessor_DecodeSample(
-    struct AADDecodeProcessor *processor, uint8_t code, uint8_t bpsample);
+    struct AADDecodeProcessor *processor, uint8_t code, uint8_t bits_per_sample);
 
 /* テーブル */
 #include "aad_tables.c"
@@ -72,6 +72,9 @@ struct AADDecoder *AADDecoder_Create(void *work, int32_t work_size)
   /* 自前確保であることをマーク */
   decoder->alloced_by_own = tmp_alloced_by_own;
 
+  /* バッファオーバーランチェック */
+  AAD_ASSERT((int32_t)(work_ptr - (uint8_t *)work) <= work_size);
+
   return decoder;
 }
 
@@ -93,6 +96,7 @@ AADApiResult AADDecoder_DecodeHeader(
   const uint8_t *data_pos;
   uint32_t u32buf;
   uint16_t u16buf;
+  uint8_t  u8buf;
   struct AADHeaderInfo tmp_header_info;
 
   /* 引数チェック */
@@ -163,6 +167,17 @@ AADApiResult AADDecoder_DecodeHeader(
     return AAD_APIRESULT_INVALID_FORMAT;
   }
   tmp_header_info.num_samples_per_block = u32buf;
+  /* マルチチャンネル処理法 */
+  ByteArray_GetUint8(data_pos, &u8buf);
+  if (u8buf >= AAD_CH_PROCESS_METHOD_INVALID) {
+    return AAD_APIRESULT_INVALID_FORMAT;
+  }
+  tmp_header_info.ch_process_method = u8buf;
+  /* モノラルではMS処理はできない */
+  if ((tmp_header_info.ch_process_method == AAD_CH_PROCESS_METHOD_MS) 
+      && (tmp_header_info.num_channels == 1)) {
+    return AAD_APIRESULT_INVALID_FORMAT;
+  }
 
   /* ヘッダサイズチェック */
   AAD_ASSERT((data_pos - data) == AAD_HEADER_SIZE);
@@ -189,16 +204,16 @@ static void AADDecodeProcessor_Reset(struct AADDecodeProcessor *processor)
 
 /* 1サンプルデコード */
 static int32_t AADDecodeProcessor_DecodeSample(
-    struct AADDecodeProcessor *processor, uint8_t code, uint8_t bpsample)
+    struct AADDecodeProcessor *processor, uint8_t code, uint8_t bits_per_sample)
 {
   int16_t idx;
   int32_t sample, qdiff, delta, predict, stepsize;
-  const uint8_t signbit = (uint8_t)(1U << (bpsample - 1));
+  const uint8_t signbit = (uint8_t)(1U << (bits_per_sample - 1));
   const uint8_t absmask = signbit - 1;
 
   AAD_ASSERT(processor != NULL);
-  AAD_ASSERT((bpsample >= 2) && (bpsample <= AAD_MAX_BITS_PER_SAMPLE));
-  AAD_ASSERT(code <= ((1U << bpsample) - 1));
+  AAD_ASSERT((bits_per_sample >= 2) && (bits_per_sample <= AAD_MAX_BITS_PER_SAMPLE));
+  AAD_ASSERT(code <= ((1U << bits_per_sample) - 1));
 
   /* 頻繁に参照する変数をオート変数に受ける */
   idx = processor->stepsize_index;
@@ -207,10 +222,10 @@ static int32_t AADDecodeProcessor_DecodeSample(
   stepsize = AAD_stepsize_table[idx];
 
   /* 差分算出 */
-  /* diff = stepsize * (delta + 0.5) / 2**(bpsample-2) */
-  /* -> diff = stepsize * (delta * 2 + 1) / 2**(bpsample-1) */
+  /* diff = stepsize * (delta + 0.5) / 2**(bits_per_sample-2) */
+  /* -> diff = stepsize * (delta * 2 + 1) / 2**(bits_per_sample-1) */
   delta = code & absmask;
-  qdiff = (stepsize * ((delta << 1) + 1)) >> (bpsample - 1);
+  qdiff = (stepsize * ((delta << 1) + 1)) >> (bits_per_sample - 1);
   qdiff = (code & signbit) ? -qdiff : qdiff; /* 符号ビットの反映 */
 
   /* フィルタ予測 */
@@ -227,7 +242,7 @@ static int32_t AADDecodeProcessor_DecodeSample(
   sample = AAD_INNER_VAL(sample, INT16_MIN, INT16_MAX);
 
   /* インデックス更新 */
-  switch (bpsample) {
+  switch (bits_per_sample) {
     case 4:
       AAD_ASSERT(code < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_4bit));
       idx += AAD_index_table_4bit[code];
@@ -345,11 +360,10 @@ static AADApiResult AADDecoder_DecodeBlock(
           AAD_ASSERT((uint32_t)(read_pos - data) <= data_size);
           AAD_ASSERT((uint32_t)(read_pos - data) <= header->block_size);
         }
-        /* TODO: MS -> LR */
         for (ch = 0; ch < header->num_channels; ch++) {
           for (i = 0; (i < 2) && ((smpl + i) < tmp_num_decode_samples); i++) {
-            buffer[ch][smpl + i] = outbuf[ch][i];
             AAD_ASSERT((smpl + i) < buffer_num_samples);
+            buffer[ch][smpl + i] = outbuf[ch][i];
           }
         }
       }
@@ -377,11 +391,10 @@ static AADApiResult AADDecoder_DecodeBlock(
           AAD_ASSERT((uint32_t)(read_pos - data) <= data_size);
           AAD_ASSERT((uint32_t)(read_pos - data) <= header->block_size);
         }
-        /* TODO: MS -> LR */
         for (ch = 0; ch < header->num_channels; ch++) {
           for (i = 0; (i < 8) && ((smpl + i) < tmp_num_decode_samples); i++) {
-            buffer[ch][smpl + i] = outbuf[ch][i];
             AAD_ASSERT((smpl + i) < buffer_num_samples);
+            buffer[ch][smpl + i] = outbuf[ch][i];
           }
         }
       }
@@ -402,17 +415,28 @@ static AADApiResult AADDecoder_DecodeBlock(
           AAD_ASSERT((uint32_t)(read_pos - data) <= data_size);
           AAD_ASSERT((uint32_t)(read_pos - data) <= header->block_size);
         }
-        /* TODO: MS -> LR */
         for (ch = 0; ch < header->num_channels; ch++) {
           for (i = 0; (i < 4) && ((smpl + i) < tmp_num_decode_samples); i++) {
-            buffer[ch][smpl + i] = outbuf[ch][i];
             AAD_ASSERT((smpl + i) < buffer_num_samples);
+            buffer[ch][smpl + i] = outbuf[ch][i];
           }
         }
       }
       break;
     default:
       return AAD_APIRESULT_INVALID_FORMAT;
+  }
+
+  /* MS -> LR */
+  if ((header->num_channels >= 2)
+      && (header->ch_process_method == AAD_CH_PROCESS_METHOD_MS)) {
+    int32_t mid, side;
+    for (smpl = 0; smpl < tmp_num_decode_samples; smpl++) {
+      mid   = buffer[0][smpl];
+      side  = buffer[1][smpl];
+      buffer[0][smpl] = AAD_INNER_VAL(mid + side, INT16_MIN, INT16_MAX);
+      buffer[1][smpl] = AAD_INNER_VAL(mid - side, INT16_MIN, INT16_MAX);
+    }
   }
 
   /* 成功終了 */
