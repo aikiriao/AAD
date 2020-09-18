@@ -195,8 +195,8 @@ static void AADDecodeProcessor_Reset(struct AADDecodeProcessor *processor)
   AAD_ASSERT(processor != NULL);
 
   for (i = 0; i < AAD_FILTER_ORDER; i++) {
-    processor->history[i]
-      = processor->weight[i] = 0;
+    processor->history[i] = 0;
+    processor->weight[i] = 0;
   }
 
   processor->stepsize_index = 0;

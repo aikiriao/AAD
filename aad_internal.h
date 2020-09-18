@@ -13,7 +13,7 @@
 #define AAD_NOISE_SHAPING_SHIFT       2                                   /* ノイズシェーピングのフィードバックゲインの右シフト量 */
 #define AAD_LMSFILTER_SHIFT           4                                   /* LMSフィルタ係数更新時のシフト量 */
 
-/* 最大の符号化値 */
+/* 最大の符号値 */
 #define AAD_MAX_CODE_VALUE            ((1 << AAD_MAX_BITS_PER_SAMPLE) - 1)
 
 /* nの倍数への切り上げ */

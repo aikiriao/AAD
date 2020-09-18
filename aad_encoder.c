@@ -87,7 +87,7 @@ AADApiResult AADEncoder_CalculateBlockSize(
   num_samples_per_interleave_data_unit = (interleave_data_unit_size * 8) / (num_channels * bits_per_sample);
 
   /* ブロックデータサイズの計算 */
-  block_data_size = max_block_size - AAD_BLOCK_HEADER_SIZE(num_channels);
+  block_data_size = (uint32_t)(max_block_size - AAD_BLOCK_HEADER_SIZE(num_channels));
   /* データ単位サイズに切り捨て */
   block_data_size = interleave_data_unit_size * (block_data_size / interleave_data_unit_size);
 
@@ -209,7 +209,7 @@ int32_t AADEncoder_CalculateWorkSize(uint16_t max_block_size)
   work_size = AAD_ALIGNMENT + sizeof(struct AADEncoder);
 
   /* バッファサイズ */
-  work_size += AAD_MAX_NUM_CHANNELS * (sizeof(int32_t) * num_samples_per_block + AAD_ALIGNMENT);
+  work_size += AAD_MAX_NUM_CHANNELS * (int32_t)(sizeof(int32_t) * num_samples_per_block + AAD_ALIGNMENT);
 
   return work_size;
 }
@@ -298,8 +298,8 @@ static void AADEncodeProcessor_Reset(struct AADEncodeProcessor *processor)
   AAD_ASSERT(processor != NULL);
 
   for (i = 0; i < AAD_FILTER_ORDER; i++) {
-    processor->history[i]
-      = processor->weight[i] = 0;
+    processor->history[i] = 0;
+    processor->weight[i] = 0;
   }
 
   processor->stepsize_index = 0;

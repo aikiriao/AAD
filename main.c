@@ -287,7 +287,7 @@ static int execute_reconstruction_core(
     pcmdata[ch] = malloc(sizeof(int32_t) * num_samples);
   }
   /* 入力wavPCMと同等の出力領域を確保（増えることはないと期待） */
-  buffer_size = sizeof(int32_t) * num_channels * num_samples;
+  buffer_size = (uint32_t)(sizeof(int32_t) * num_channels * num_samples);
   buffer = malloc(buffer_size);
 
   /* 16bit幅でデータ取得 */
@@ -532,7 +532,7 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  /* 指定されたオプションの数 */
+  /* 指定されたモードの数 */
   num_modes_specified
     = CommandLineParser_GetOptionAcquired(command_line_spec, "decode")
     + CommandLineParser_GetOptionAcquired(command_line_spec, "encode")
