@@ -339,7 +339,8 @@ static AADApiResult AADDecoder_DecodeBlock(
 
   /* 先頭サンプルはヘッダに入っている */
   for (ch = 0; ch < header->num_channels; ch++) {
-    for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
+    /* 最終ブロックがヘッダのみで終わっている場合があるため、バッファサイズを超えないようにする */
+    for (smpl = 0; smpl < AAD_MIN_VAL(AAD_FILTER_ORDER, buffer_num_samples); smpl++) {
       buffer[ch][smpl] = decoder->processor[ch].history[AAD_FILTER_ORDER - smpl - 1];
     }
   }
