@@ -12,8 +12,8 @@ static const int8_t AAD_index_table_4bit[16] = {
 
 /* インデックス変動テーブル: 3bit */
 static const int8_t AAD_index_table_3bit[8] = {
-  -1, -1, 2, 4,
-  -1, -1, 2, 4,
+  -1, -1, 2, 8,
+  -1, -1, 2, 8,
 };
 
 /* インデックス変動テーブル: 2bit */
