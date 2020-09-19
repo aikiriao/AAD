@@ -10,7 +10,6 @@ struct AADEncodeProcessor {
   int16_t history[AAD_FILTER_ORDER];  /* 入力データ履歴 */
   int32_t weight[AAD_FILTER_ORDER];   /* フィルタ係数   */
   uint8_t stepsize_index;             /* ステップサイズテーブルの参照インデックス */
-  int32_t quantize_error;             /* 量子化誤差 */
 };
 
 /* エンコーダ */
@@ -303,7 +302,6 @@ static void AADEncodeProcessor_Reset(struct AADEncodeProcessor *processor)
   }
 
   processor->stepsize_index = 0;
-  processor->quantize_error = 0;
 }
 
 /* 1サンプルエンコード */
@@ -336,7 +334,6 @@ static uint8_t AADEncodeProcessor_EncodeSample(
 
   /* 差分 */
   diff = sample - predict;
-  diff -= (processor->quantize_error >> AAD_NOISE_SHAPING_SHIFT); /* 量子化誤差をフィードバック（ノイズシェーピング） */
   sign = diff < 0;
   diffabs = sign ? -diff : diff;
 
@@ -381,8 +378,6 @@ static uint8_t AADEncodeProcessor_EncodeSample(
   quantize_sample = qdiff + predict;
   /* 16bit幅にクリップ */
   quantize_sample = AAD_INNER_VAL(quantize_sample, INT16_MIN, INT16_MAX);
-  /* 誤差の量子化誤差 */
-  processor->quantize_error = diff - qdiff;
 
   /* フィルタ係数更新 */
   processor->weight[3] += (qdiff * processor->history[3] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);

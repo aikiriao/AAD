@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+/* コーデックバージョン */
+#define AAD_CODEC_VERSION           1
+
 /* フォーマットバージョン */
 #define AAD_FORMAT_VERSION          1
 
