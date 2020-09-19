@@ -1,8 +1,8 @@
-#include <stdint.h>
-
 /* 多重インクルード防止 */
 #ifndef AAD_TABLES_C_INCLUDED
 #define AAD_TABLES_C_INCLUDED
+
+#include <stdint.h>
 
 /* インデックス変動テーブル: 4bit */
 static const int8_t AAD_index_table_4bit[16] = {
