@@ -18,6 +18,7 @@ struct AADEncoder {
   uint8_t                   set_parameter;
   struct AADEncodeProcessor processor[AAD_MAX_NUM_CHANNELS];
   uint8_t                   alloced_by_own;
+  uint8_t                   num_encode_trials;
   int32_t                   *input_buffer[AAD_MAX_NUM_CHANNELS];
   void                      *work;
 };
@@ -611,6 +612,12 @@ AADApiResult AADEncoder_SetEncodeParameter(
     return AAD_APIRESULT_INVALID_FORMAT;
   }
 
+  /* エンコード繰り返し回数のセット */
+  if (parameter->num_encode_trials == 0) {
+    return AAD_APIRESULT_INVALID_FORMAT;
+  }
+  encoder->num_encode_trials = parameter->num_encode_trials;
+
   /* ヘッダ設定 */
   encoder->header = tmp_header;
 
@@ -628,6 +635,7 @@ AADApiResult AADEncoder_EncodeWhole(
 {
   AADApiResult ret;
   uint32_t progress, ch, write_size, write_offset, num_encode_samples;
+  uint32_t trial;
   uint8_t *data_pos;
   const int32_t *input_ptr[AAD_MAX_NUM_CHANNELS];
   const struct AADHeaderInfo *header;
@@ -659,11 +667,13 @@ AADApiResult AADEncoder_EncodeWhole(
   write_offset = AAD_HEADER_SIZE;
   data_pos = data + AAD_HEADER_SIZE;
 
-  /* フィルタの適応を早めるため、先頭部分を一回空エンコード */
-  if ((ret = AADEncoder_EncodeBlock(encoder,
-          input, AAD_MIN_VAL(header->num_samples_per_block, num_samples),
-          data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
-    return ret;
+  /* フィルタの適応を早めるため、先頭部分を空エンコード */
+  for (trial = 0; trial < encoder->num_encode_trials; trial++) {
+    if ((ret = AADEncoder_EncodeBlock(encoder,
+            input, AAD_MIN_VAL(header->num_samples_per_block, num_samples),
+            data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
+      return ret;
+    }
   }
 
   /* ブロックを時系列順にエンコード */
@@ -675,11 +685,26 @@ AADApiResult AADEncoder_EncodeWhole(
     for (ch = 0; ch < header->num_channels; ch++) {
       input_ptr[ch] = &input[ch][progress];
     }
-    /* ブロックエンコード */
-    if ((ret = AADEncoder_EncodeBlock(encoder,
-            input_ptr, num_encode_samples,
-            data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
-      return ret;
+    /* 適応を早めるために連続するブロックを複数回エンコード */
+    for (trial = 0; trial < encoder->num_encode_trials; trial++) {
+      /* 前のブロック */
+      if (progress >= header->num_samples_per_block) {
+        const int32_t *prev_input_ptr[AAD_MAX_NUM_CHANNELS];
+        for (ch = 0; ch < header->num_channels; ch++) {
+          prev_input_ptr[ch] = &input[ch][progress - header->num_samples_per_block];
+        }
+        if ((ret = AADEncoder_EncodeBlock(encoder,
+                prev_input_ptr, header->num_samples_per_block,
+                data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
+          return ret;
+        }
+      }
+      /* エンコード対象のブロック */
+      if ((ret = AADEncoder_EncodeBlock(encoder,
+              input_ptr, num_encode_samples,
+              data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
+        return ret;
+      }
     }
     /* 進捗更新 */
     data_pos      += write_size;

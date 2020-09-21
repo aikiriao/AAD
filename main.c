@@ -17,7 +17,7 @@
 #include <math.h>
 
 /* バージョン文字列 */
-#define AADCUI_VERSION_STRING  "1.3.0"
+#define AADCUI_VERSION_STRING  "1.4.0"
 
 /* コマンドライン仕様 */
 static struct CommandLineParserSpecification command_line_spec[] = {
@@ -26,9 +26,6 @@ static struct CommandLineParserSpecification command_line_spec[] = {
     NULL, COMMAND_LINE_PARSER_FALSE },
   { 'd', "decode", COMMAND_LINE_PARSER_FALSE, 
     "Decode mode (.aad file -> wav file)", 
-    NULL, COMMAND_LINE_PARSER_FALSE },
-  { 'i', "information", COMMAND_LINE_PARSER_FALSE, 
-    "Show information of encoded .aad file", 
     NULL, COMMAND_LINE_PARSER_FALSE },
   { 'r', "reconstruct", COMMAND_LINE_PARSER_FALSE, 
     "Reconstruction mode (wav file -> (encode -> decode) -> decoded wav file)",
@@ -39,12 +36,18 @@ static struct CommandLineParserSpecification command_line_spec[] = {
   { 'c', "calculate", COMMAND_LINE_PARSER_FALSE, 
     "Calculate statistics(e.g. RMS error) between original and reconstructed wav", 
     NULL, COMMAND_LINE_PARSER_FALSE },
+  { 'i', "information", COMMAND_LINE_PARSER_FALSE, 
+    "Show information of encoded .aad file", 
+    NULL, COMMAND_LINE_PARSER_FALSE },
   { 'b', "bits-per-sample", COMMAND_LINE_PARSER_TRUE, 
     "Specify bits per sample(in 2,3,4) (default: 4)", 
     "4", COMMAND_LINE_PARSER_FALSE },
   { 's', "max-block-size", COMMAND_LINE_PARSER_TRUE, 
     "Specify max block size (default: 1024)", 
     "1024", COMMAND_LINE_PARSER_FALSE },
+  { 't', "num-encode-trials", COMMAND_LINE_PARSER_TRUE, 
+    "Specify number of encode Trials (default: 2)", 
+    "2", COMMAND_LINE_PARSER_FALSE },
   { 'm', "ms-conversion", COMMAND_LINE_PARSER_FALSE, 
     "Switch to use LR to MS conversion (default: no)", 
     NULL, COMMAND_LINE_PARSER_FALSE },
@@ -187,6 +190,7 @@ static int execute_encode(
   enc_param.bits_per_sample   = encode_paramemter->bits_per_sample;
   enc_param.max_block_size    = encode_paramemter->max_block_size;
   enc_param.ch_process_method = encode_paramemter->ch_process_method;
+  enc_param.num_encode_trials = encode_paramemter->num_encode_trials;
   if ((api_result = AADEncoder_SetEncodeParameter(encoder, &enc_param))
       != AAD_APIRESULT_OK) {
     fprintf(stderr, "Failed to set encode parameter. Please check encode parameter. \n");
@@ -307,6 +311,7 @@ static int execute_reconstruction_core(
   enc_param.bits_per_sample   = encode_paramemter->bits_per_sample;
   enc_param.max_block_size    = encode_paramemter->max_block_size;
   enc_param.ch_process_method = encode_paramemter->ch_process_method;
+  enc_param.num_encode_trials = encode_paramemter->num_encode_trials;
   if ((api_result = AADEncoder_SetEncodeParameter(encoder, &enc_param))
       != AAD_APIRESULT_OK) {
     fprintf(stderr, "Failed to set encode parameter. Please check encode parameter. \n");
@@ -566,6 +571,8 @@ int main(int argc, char **argv)
       = (uint8_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "bits-per-sample"), NULL, 10);
     encode_paramemter.max_block_size
       = (uint16_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "max-block-size"), NULL, 10);
+    encode_paramemter.num_encode_trials
+      = (uint8_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "num-encode-trials"), NULL, 10);
     encode_paramemter.ch_process_method = AAD_CH_PROCESS_METHOD_NONE;
     if (CommandLineParser_GetOptionAcquired(command_line_spec, "ms-conversion") == COMMAND_LINE_PARSER_TRUE) {
       encode_paramemter.ch_process_method = AAD_CH_PROCESS_METHOD_MS;
