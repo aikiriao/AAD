@@ -311,7 +311,7 @@ static uint8_t AADEncodeProcessor_EncodeSample(
   uint8_t code;
   int16_t idx;
   int32_t predict, diff, qdiff, delta, stepsize, diffabs, sign;
-  int32_t quantize_sample;
+  int32_t quantize_sample, ord;
   const uint8_t signbit = (uint8_t)(1U << (bits_per_sample - 1));
   const uint8_t absmask = signbit - 1;
 
@@ -326,10 +326,9 @@ static uint8_t AADEncodeProcessor_EncodeSample(
 
   /* フィルタ予測 */
   predict = AAD_FIXEDPOINT_0_5;
-  predict += processor->history[0] * processor->weight[0];
-  predict += processor->history[1] * processor->weight[1];
-  predict += processor->history[2] * processor->weight[2];
-  predict += processor->history[3] * processor->weight[3];
+  for (ord = 0; ord < AAD_FILTER_ORDER; ord++) {
+    predict += processor->history[ord] * processor->weight[ord];
+  }
   predict >>= AAD_FIXEDPOINT_DIGITS;
 
   /* 差分 */
@@ -380,15 +379,15 @@ static uint8_t AADEncodeProcessor_EncodeSample(
   quantize_sample = AAD_INNER_VAL(quantize_sample, INT16_MIN, INT16_MAX);
 
   /* フィルタ係数更新 */
-  processor->weight[3] += (qdiff * processor->history[3] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
-  processor->weight[2] += (qdiff * processor->history[2] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
-  processor->weight[1] += (qdiff * processor->history[1] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
-  processor->weight[0] += (qdiff * processor->history[0] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
+  for (ord = 0; ord < AAD_FILTER_ORDER; ord++) {
+    processor->weight[ord]
+      += (qdiff * processor->history[ord] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
+  }
 
   /* 入力データ履歴更新 */
-  processor->history[3] = processor->history[2];
-  processor->history[2] = processor->history[1];
-  processor->history[1] = processor->history[0];
+  for (ord = AAD_FILTER_ORDER - 1; ord > 0; ord--) {
+    processor->history[ord] = processor->history[ord - 1];
+  }
   processor->history[0] = (int16_t)quantize_sample;
 
   AAD_ASSERT(code <= AAD_MAX_CODE_VALUE);

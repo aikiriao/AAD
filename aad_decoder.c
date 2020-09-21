@@ -207,7 +207,7 @@ static int32_t AADDecodeProcessor_DecodeSample(
     struct AADDecodeProcessor *processor, uint8_t code, uint8_t bits_per_sample)
 {
   int16_t idx;
-  int32_t sample, qdiff, delta, predict, stepsize;
+  int32_t sample, qdiff, delta, predict, stepsize, ord;
   const uint8_t signbit = (uint8_t)(1U << (bits_per_sample - 1));
   const uint8_t absmask = signbit - 1;
 
@@ -230,10 +230,9 @@ static int32_t AADDecodeProcessor_DecodeSample(
 
   /* フィルタ予測 */
   predict = AAD_FIXEDPOINT_0_5;
-  predict += processor->history[0] * processor->weight[0];
-  predict += processor->history[1] * processor->weight[1];
-  predict += processor->history[2] * processor->weight[2];
-  predict += processor->history[3] * processor->weight[3];
+  for (ord = 0; ord < AAD_FILTER_ORDER; ord++) {
+    predict += processor->history[ord] * processor->weight[ord];
+  }
   predict >>= AAD_FIXEDPOINT_DIGITS;
 
   /* 予測を加え信号を復元 */
@@ -264,15 +263,15 @@ static int32_t AADDecodeProcessor_DecodeSample(
   processor->stepsize_index = (uint8_t)idx;
 
   /* 係数更新 */
-  processor->weight[3] += (qdiff * processor->history[3] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
-  processor->weight[2] += (qdiff * processor->history[2] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
-  processor->weight[1] += (qdiff * processor->history[1] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
-  processor->weight[0] += (qdiff * processor->history[0] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
+  for (ord = 0; ord < AAD_FILTER_ORDER; ord++) {
+    processor->weight[ord]
+      += (qdiff * processor->history[ord] + AAD_FIXEDPOINT_0_5) >> (AAD_FIXEDPOINT_DIGITS + AAD_LMSFILTER_SHIFT);
+  }
 
   /* 入力データ履歴更新 */
-  processor->history[3] = processor->history[2];
-  processor->history[2] = processor->history[1];
-  processor->history[1] = processor->history[0];
+  for (ord = AAD_FILTER_ORDER - 1; ord > 0; ord--) {
+    processor->history[ord] = processor->history[ord - 1];
+  }
   processor->history[0] = (int16_t)sample;
 
   return sample;
