@@ -13,7 +13,7 @@
 #define AAD_MAX_NUM_CHANNELS        2
 
 /* 最小のサンプルあたりビット数 */
-#define AAD_MIN_BITS_PER_SAMPLE     1
+#define AAD_MIN_BITS_PER_SAMPLE     2
 
 /* 最大のサンプルあたりビット数 */
 #define AAD_MAX_BITS_PER_SAMPLE     4
