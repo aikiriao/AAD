@@ -667,15 +667,6 @@ AADApiResult AADEncoder_EncodeWhole(
   write_offset = AAD_HEADER_SIZE;
   data_pos = data + AAD_HEADER_SIZE;
 
-  /* フィルタの適応を早めるため、先頭部分を空エンコード */
-  for (trial = 0; trial < encoder->num_encode_trials; trial++) {
-    if ((ret = AADEncoder_EncodeBlock(encoder,
-            input, AAD_MIN_VAL(header->num_samples_per_block, num_samples),
-            data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
-      return ret;
-    }
-  }
-
   /* ブロックを時系列順にエンコード */
   while (progress < num_samples) {
     /* エンコードサンプル数の確定 */
