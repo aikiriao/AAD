@@ -212,7 +212,7 @@ static int32_t AADDecodeProcessor_DecodeSample(
   const uint8_t absmask = signbit - 1;
 
   AAD_ASSERT(processor != NULL);
-  AAD_ASSERT((bits_per_sample >= 2) && (bits_per_sample <= AAD_MAX_BITS_PER_SAMPLE));
+  AAD_ASSERT((bits_per_sample >= AAD_MIN_BITS_PER_SAMPLE) && (bits_per_sample <= AAD_MAX_BITS_PER_SAMPLE));
   AAD_ASSERT(code <= ((1U << bits_per_sample) - 1));
 
   /* 頻繁に参照する変数をオート変数に受ける */
