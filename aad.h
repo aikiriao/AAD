@@ -4,10 +4,10 @@
 #include <stdint.h>
 
 /* コーデックバージョン */
-#define AAD_CODEC_VERSION           5
+#define AAD_CODEC_VERSION           6
 
 /* フォーマットバージョン */
-#define AAD_FORMAT_VERSION          2
+#define AAD_FORMAT_VERSION          3
 
 /* 処理可能な最大チャンネル数 */
 #define AAD_MAX_NUM_CHANNELS        2

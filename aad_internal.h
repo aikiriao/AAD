@@ -27,6 +27,9 @@
 /* min以上max未満に制限 */
 #define AAD_INNER_VAL(val, min, max)  AAD_MAX_VAL(min, AAD_MIN_VAL(max, val))
 
+/* 絶対値の取得 */
+#define AAD_ABS_VAL(val)              (((val) >= 0) ? (val) : -(val))
+
 /* テーブル要素数の計算 */
 #define AAD_NUM_TABLE_ELEMENTS(array) (sizeof(array) / sizeof(array[0]))
 

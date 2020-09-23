@@ -294,7 +294,6 @@ AADApiResult AADDecoder_DecodeBlock(
   const struct AADHeaderInfo *header;
   uint32_t ch, smpl;
   const uint8_t *read_pos;
-  uint8_t u8buf;
   uint32_t tmp_num_decode_samples;
 
   /* 引数チェック */
@@ -326,18 +325,19 @@ AADApiResult AADDecoder_DecodeBlock(
   /* ブロックヘッダデコード */
   for (ch = 0; ch < header->num_channels; ch++) {
     uint16_t u16buf;
+    uint8_t shift;
+    /* ステップサイズインデックス */
+    ByteArray_GetUint8(read_pos, &(decoder->processor[ch].stepsize_index));
+    /* 係数シフト量 */
+    ByteArray_GetUint8(read_pos, &shift);
     /* フィルタの状態 */
     for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
       ByteArray_GetUint16BE(read_pos, &u16buf);
       decoder->processor[ch].weight[smpl] = (int16_t)u16buf;
+      decoder->processor[ch].weight[smpl] <<= shift;
       ByteArray_GetUint16BE(read_pos, &u16buf);
       decoder->processor[ch].history[smpl] = (int16_t)u16buf;
     }
-    /* ステップサイズインデックス */
-    ByteArray_GetUint8(read_pos, &(decoder->processor[ch].stepsize_index));
-    /* 予約領域 */
-    ByteArray_GetUint8(read_pos, &u8buf);
-    AAD_ASSERT(u8buf == 0);
   }
 
   /* ブロックヘッダサイズチェック */

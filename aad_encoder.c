@@ -457,19 +457,38 @@ static AADApiResult AADEncoder_EncodeBlock(
 
   /* ブロックヘッダエンコード */
   for (ch = 0; ch < header->num_channels; ch++) {
-    /* フィルタの状態 */
+    /* シフト量の計算と右シフト */
+    uint8_t shift;
+    int32_t maxabs = 0, mask;
+    /* 最大の係数絶対値の探索 */
     for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
-      encoder->processor[ch].weight[smpl]
-        = AAD_INNER_VAL(encoder->processor[ch].weight[smpl], INT16_MIN, INT16_MAX);
-      AAD_ASSERT(encoder->processor[ch].weight[smpl] <= INT16_MAX);
-      AAD_ASSERT(encoder->processor[ch].weight[smpl] >= INT16_MIN);
-      ByteArray_PutUint16BE(data_pos, (uint16_t)encoder->processor[ch].weight[smpl]);
-      ByteArray_PutUint16BE(data_pos, encoder->processor[ch].history[smpl]);
+      int32_t abs = AAD_ABS_VAL(encoder->processor[ch].weight[smpl]);
+      if (maxabs < abs) {
+        maxabs = abs;
+      }
+    }
+    /* 最大値が16bit幅に収まる右シフト量をサーチ */
+    shift = 0;
+    while (maxabs > INT16_MAX) {
+      maxabs >>= 1;
+      shift++;
+    }
+    /* 係数シフトによる丸め（シフトしたビットは0にクリア） */
+    mask = ~((1 << shift) - 1);
+    for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
+      encoder->processor[ch].weight[smpl] &= mask;
     }
     /* ステップサイズインデックス */
     ByteArray_PutUint8(data_pos, encoder->processor[ch].stepsize_index);
-    /* 予約領域 */
-    ByteArray_PutUint8(data_pos, 0);
+    /* 係数シフト量 */
+    ByteArray_PutUint8(data_pos, shift);
+    /* フィルタの状態を出力 係数はシフトして記録 */
+    for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
+      AAD_ASSERT((encoder->processor[ch].weight[smpl] >> shift) <= INT16_MAX);
+      AAD_ASSERT((encoder->processor[ch].weight[smpl] >> shift) >= INT16_MIN);
+      ByteArray_PutUint16BE(data_pos, (uint16_t)(encoder->processor[ch].weight[smpl] >> shift));
+      ByteArray_PutUint16BE(data_pos, encoder->processor[ch].history[smpl]);
+    }
   }
 
   /* ブロックヘッダサイズチェック */
