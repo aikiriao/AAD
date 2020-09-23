@@ -1,12 +1,18 @@
 #include "test.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <assert.h>
 
 /* テスト対象のモジュール */
 #include "../aad_decoder.c"
 
 /* テストデータ作成のためにエンコーダを使う */
 #include "../aad_encoder.h"
+
+/* リファレンス一致確認のためにwavを使用 */
+#include "../wav.h"
 
 /* テストのセットアップ関数 */
 void AADDecoderTest_Setup(void);
@@ -200,6 +206,77 @@ static void AADDecoderTest_CreateDestroyTest(void *obj)
   }
 }
 
+/* デコード結果の一致確認テスト */
+static void AADDecoderTest_DecodeTest(void *obj)
+{
+  TEST_UNUSED_PARAMETER(obj);
+
+  {
+    const char encoded_file[] = "sin300Hz_mono.aad";
+    const char referenced_wav[] = "sin300Hz_mono_decoded.wav";
+    FILE *fp;
+    struct stat fstat;
+    uint32_t ch, smpl, data_size;
+    uint8_t is_ok;
+    uint8_t *data;
+    struct AADDecoder *decoder;
+    struct AADHeaderInfo      header;
+    int32_t *decoded[AAD_MAX_NUM_CHANNELS];
+    struct WAVFile  *wav;
+
+    /* 入力wavの読み取り */
+    wav = WAV_CreateFromFile(referenced_wav);
+    assert(wav != NULL);
+
+    /* データロード */
+    stat(encoded_file, &fstat);
+    data_size = (uint32_t)fstat.st_size;
+    data = (uint8_t *)malloc(data_size);
+    fp = fopen(encoded_file, "rb");
+    assert(fp != NULL);
+    fread(data, sizeof(uint8_t), data_size, fp);
+    fclose(fp);
+
+    /* デコーダ作成 */
+    decoder = AADDecoder_Create(NULL, 0);
+
+    /* ヘッダ読み取り */
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, data_size, &header), AAD_APIRESULT_OK);
+
+    /* 出力バッファ領域確保 */
+    for (ch = 0; ch < header.num_channels; ch++) {
+      decoded[ch] = malloc(sizeof(int32_t) * header.num_samples);
+    }
+
+    /* 全データをデコード */
+    Test_AssertEqual(AADDecoder_DecodeWhole(decoder, 
+          data, data_size, decoded, 
+          header.num_channels, header.num_samples), AAD_APIRESULT_OK);
+    
+    /* 一致確認 */
+    is_ok = 1;
+    for (ch = 0; ch < header.num_channels; ch++) {
+      for (smpl = 0; smpl < header.num_samples; smpl++) {
+        if (WAVFile_PCM(wav, smpl, ch) != (decoded[ch][smpl] << 16)) {
+          is_ok = 0;
+          goto CHECK_END;
+        }
+      }
+    }
+
+CHECK_END:
+    Test_AssertEqual(is_ok, 1);
+
+    /* 領域開放 */
+    for (ch = 0; ch < header.num_channels; ch++) {
+      free(decoded[ch]);
+    }
+    AADDecoder_Destroy(decoder);
+    free(data);
+    WAV_Destroy(wav);
+  }
+}
+
 void AADDecoderTest_Setup(void)
 {
   struct TestSuite *suite
@@ -208,4 +285,5 @@ void AADDecoderTest_Setup(void)
 
   Test_AddTest(suite, AADDecoderTest_HeaderDecodeTest);
   Test_AddTest(suite, AADDecoderTest_CreateDestroyTest);
+  Test_AddTest(suite, AADDecoderTest_DecodeTest);
 }
