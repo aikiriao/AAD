@@ -206,74 +206,88 @@ static void AADDecoderTest_CreateDestroyTest(void *obj)
   }
 }
 
+static uint8_t AADDecoderTest_CheckDecode(const char *encoded_file, const char *reference_wav)
+{
+  FILE *fp;
+  struct stat fstat;
+  uint32_t ch, smpl, data_size;
+  uint8_t is_ok;
+  uint8_t *data;
+  struct AADDecoder *decoder;
+  struct AADHeaderInfo      header;
+  int32_t *decoded[AAD_MAX_NUM_CHANNELS];
+  struct WAVFile  *wav;
+
+  assert((encoded_file != NULL) && (reference_wav != NULL));
+
+  /* 入力wavの読み取り */
+  wav = WAV_CreateFromFile(reference_wav);
+  assert(wav != NULL);
+
+  /* データロード */
+  stat(encoded_file, &fstat);
+  data_size = (uint32_t)fstat.st_size;
+  data = (uint8_t *)malloc(data_size);
+  fp = fopen(encoded_file, "rb");
+  assert(fp != NULL);
+  fread(data, sizeof(uint8_t), data_size, fp);
+  fclose(fp);
+
+  /* デコーダ作成 */
+  decoder = AADDecoder_Create(NULL, 0);
+
+  /* ヘッダ読み取り */
+  if (AADDecoder_DecodeHeader(data, data_size, &header) != AAD_APIRESULT_OK) {
+    free(data);
+    WAV_Destroy(wav);
+    AADDecoder_Destroy(decoder);
+    return 0;
+  }
+
+  /* 出力バッファ領域確保 */
+  for (ch = 0; ch < header.num_channels; ch++) {
+    decoded[ch] = malloc(sizeof(int32_t) * header.num_samples);
+  }
+
+  /* 全データをデコード */
+  if (AADDecoder_DecodeWhole(decoder, 
+        data, data_size, decoded, 
+        header.num_channels, header.num_samples) != AAD_APIRESULT_OK) {
+    is_ok = 0;
+    goto CHECK_END;
+  }
+
+  /* 一致確認 */
+  is_ok = 1;
+  for (ch = 0; ch < header.num_channels; ch++) {
+    for (smpl = 0; smpl < header.num_samples; smpl++) {
+      if (WAVFile_PCM(wav, smpl, ch) != (decoded[ch][smpl] << 16)) {
+        is_ok = 0;
+        goto CHECK_END;
+      }
+    }
+  }
+
+CHECK_END:
+  /* 領域開放 */
+  for (ch = 0; ch < header.num_channels; ch++) {
+    free(decoded[ch]);
+  }
+  AADDecoder_Destroy(decoder);
+  free(data);
+  WAV_Destroy(wav);
+
+  return is_ok;
+}
+
 /* デコード結果の一致確認テスト */
 static void AADDecoderTest_DecodeTest(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
 
   {
-    const char encoded_file[] = "sin300Hz_mono.aad";
-    const char referenced_wav[] = "sin300Hz_mono_decoded.wav";
-    FILE *fp;
-    struct stat fstat;
-    uint32_t ch, smpl, data_size;
-    uint8_t is_ok;
-    uint8_t *data;
-    struct AADDecoder *decoder;
-    struct AADHeaderInfo      header;
-    int32_t *decoded[AAD_MAX_NUM_CHANNELS];
-    struct WAVFile  *wav;
-
-    /* 入力wavの読み取り */
-    wav = WAV_CreateFromFile(referenced_wav);
-    assert(wav != NULL);
-
-    /* データロード */
-    stat(encoded_file, &fstat);
-    data_size = (uint32_t)fstat.st_size;
-    data = (uint8_t *)malloc(data_size);
-    fp = fopen(encoded_file, "rb");
-    assert(fp != NULL);
-    fread(data, sizeof(uint8_t), data_size, fp);
-    fclose(fp);
-
-    /* デコーダ作成 */
-    decoder = AADDecoder_Create(NULL, 0);
-
-    /* ヘッダ読み取り */
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, data_size, &header), AAD_APIRESULT_OK);
-
-    /* 出力バッファ領域確保 */
-    for (ch = 0; ch < header.num_channels; ch++) {
-      decoded[ch] = malloc(sizeof(int32_t) * header.num_samples);
-    }
-
-    /* 全データをデコード */
-    Test_AssertEqual(AADDecoder_DecodeWhole(decoder, 
-          data, data_size, decoded, 
-          header.num_channels, header.num_samples), AAD_APIRESULT_OK);
-    
-    /* 一致確認 */
-    is_ok = 1;
-    for (ch = 0; ch < header.num_channels; ch++) {
-      for (smpl = 0; smpl < header.num_samples; smpl++) {
-        if (WAVFile_PCM(wav, smpl, ch) != (decoded[ch][smpl] << 16)) {
-          is_ok = 0;
-          goto CHECK_END;
-        }
-      }
-    }
-
-CHECK_END:
-    Test_AssertEqual(is_ok, 1);
-
-    /* 領域開放 */
-    for (ch = 0; ch < header.num_channels; ch++) {
-      free(decoded[ch]);
-    }
-    AADDecoder_Destroy(decoder);
-    free(data);
-    WAV_Destroy(wav);
+    Test_AssertEqual(AADDecoderTest_CheckDecode("sin300Hz_mono.aad", "sin300Hz_mono_decoded.wav"), 1);
+    Test_AssertEqual(AADDecoderTest_CheckDecode("sin300Hz.aad", "sin300Hz_decoded.wav"), 1);
   }
 }
 
