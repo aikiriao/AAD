@@ -131,6 +131,13 @@ AADApiResult AADDecoder_DecodeHeader(
     return AAD_APIRESULT_INVALID_FORMAT;
   }
 
+  /* コーデックバージョン */
+  ByteArray_GetUint32BE(data_pos, &u32buf);
+  if (u32buf != AAD_CODEC_VERSION) {
+    /* バージョン不一致の場合は無条件で失敗 */
+    return AAD_APIRESULT_INVALID_FORMAT;
+  }
+
   /* チャンネル数 */
   ByteArray_GetUint16BE(data_pos, &u16buf);
   if ((u16buf == 0) || (u16buf > AAD_MAX_NUM_CHANNELS)) {

@@ -169,6 +169,8 @@ AADApiResult AADEncoder_EncodeHeader(
   ByteArray_PutUint8(data_pos, '\0');
   /* フォーマットバージョン */
   ByteArray_PutUint32BE(data_pos, AAD_FORMAT_VERSION);
+  /* コーデックバージョン */
+  ByteArray_PutUint32BE(data_pos, AAD_CODEC_VERSION);
   /* チャンネル数 */
   ByteArray_PutUint16BE(data_pos, header_info->num_channels);
   /* サンプル数 */

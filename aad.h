@@ -7,7 +7,7 @@
 #define AAD_CODEC_VERSION           5
 
 /* フォーマットバージョン */
-#define AAD_FORMAT_VERSION          1
+#define AAD_FORMAT_VERSION          2
 
 /* 処理可能な最大チャンネル数 */
 #define AAD_MAX_NUM_CHANNELS        2
@@ -19,7 +19,7 @@
 #define AAD_MAX_BITS_PER_SAMPLE     4
 
 /* ヘッダサイズ[byte] */
-#define AAD_HEADER_SIZE             27
+#define AAD_HEADER_SIZE             31
 
 /* API結果型 */
 typedef enum AADApiResultTag {
