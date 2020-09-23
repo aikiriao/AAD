@@ -206,10 +206,10 @@ static void AADDecodeProcessor_Reset(struct AADDecodeProcessor *processor)
 static int32_t AADDecodeProcessor_DecodeSample(
     struct AADDecodeProcessor *processor, uint8_t code, uint8_t bits_per_sample)
 {
-  int16_t idx;
+  int32_t idx;
   int32_t sample, qdiff, delta, predict, stepsize, ord;
   const uint8_t signbit = (uint8_t)(1U << (bits_per_sample - 1));
-  const uint8_t absmask = signbit - 1;
+  const uint8_t absmask = (uint8_t)(signbit - 1);
 
   AAD_ASSERT(processor != NULL);
   AAD_ASSERT((bits_per_sample >= AAD_MIN_BITS_PER_SAMPLE) && (bits_per_sample <= AAD_MAX_BITS_PER_SAMPLE));

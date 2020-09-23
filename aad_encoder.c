@@ -96,8 +96,8 @@ AADApiResult AADEncoder_CalculateBlockSize(
     = num_samples_per_interleave_data_unit * (block_data_size / interleave_data_unit_size);
   
   /* ブロックサイズの確定 */
-  AAD_ASSERT(AAD_BLOCK_HEADER_SIZE(num_channels) + block_data_size <= UINT16_MAX);
-  (*block_size) = (uint16_t)(AAD_BLOCK_HEADER_SIZE(num_channels) + block_data_size);
+  AAD_ASSERT((uint32_t)AAD_BLOCK_HEADER_SIZE(num_channels) + block_data_size <= UINT16_MAX);
+  (*block_size) = (uint16_t)((uint16_t)AAD_BLOCK_HEADER_SIZE(num_channels) + block_data_size);
   /* ヘッダに入っている分を加算する */
   if (num_samples_per_block != NULL) {
     (*num_samples_per_block) = num_samples_in_block_data + AAD_FILTER_ORDER;
@@ -310,11 +310,11 @@ static uint8_t AADEncodeProcessor_EncodeSample(
     struct AADEncodeProcessor *processor, int32_t sample, uint8_t bits_per_sample)
 {
   uint8_t code;
-  int16_t idx;
+  int32_t idx;
   int32_t predict, diff, qdiff, delta, stepsize, diffabs, sign;
   int32_t quantize_sample, ord;
   const uint8_t signbit = (uint8_t)(1U << (bits_per_sample - 1));
-  const uint8_t absmask = signbit - 1;
+  const uint8_t absmask = (uint8_t)(signbit - 1);
 
   AAD_ASSERT(processor != NULL);
   AAD_ASSERT((bits_per_sample >= AAD_MIN_BITS_PER_SAMPLE) && (bits_per_sample <= AAD_MAX_BITS_PER_SAMPLE));
@@ -511,7 +511,6 @@ static AADApiResult AADEncoder_EncodeBlock(
           outbuf[0] = (uint8_t)((code[0] << 5) | (code[1] << 2) | ((code[2] & 0x6) >> 1));
           outbuf[1] = (uint8_t)(((code[2] & 0x1) << 7) | (code[3] << 4) | (code[4] << 1) | ((code[5] & 0x4) >> 2));
           outbuf[2] = (uint8_t)(((code[5] & 0x3) << 6) | (code[6] << 3) | (code[7]));
-          AAD_ASSERT((outbuf[0] <= 0xFF) && (outbuf[1] <= 0xFF) && (outbuf[2] <= 0xFF));
           ByteArray_PutUint8(data_pos, outbuf[0]);
           ByteArray_PutUint8(data_pos, outbuf[1]);
           ByteArray_PutUint8(data_pos, outbuf[2]);

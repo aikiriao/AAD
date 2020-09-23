@@ -280,6 +280,7 @@ static void AADEncoderTest_SetEncodeParameterTest(void *obj)
     p__param->bits_per_sample = 4;                            \
     p__param->max_block_size  = 256;                          \
     p__param->ch_process_method = AAD_CH_PROCESS_METHOD_NONE; \
+    p__param->num_encode_trials = 1;                          \
 }
 
   /* 成功例 */
