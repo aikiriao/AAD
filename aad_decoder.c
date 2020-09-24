@@ -263,7 +263,7 @@ static int32_t AADDecodeProcessor_DecodeSample(
       break;
     default: AAD_ASSERT(0);
   }
-  idx = AAD_INNER_VAL(idx, 0, (int16_t)(AAD_NUM_TABLE_ELEMENTS(AAD_stepsize_table) - 1));
+  idx = AAD_INNER_VAL(idx, 0, (int32_t)(AAD_NUM_TABLE_ELEMENTS(AAD_stepsize_table) - 1));
 
   /* 計算結果の反映 */
   AAD_ASSERT(idx <= UINT8_MAX);
