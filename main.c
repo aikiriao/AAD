@@ -16,9 +16,6 @@
 #include <sys/stat.h>
 #include <math.h>
 
-/* バージョン文字列 */
-#define AADCUI_VERSION_STRING  "1.4.0"
-
 /* コマンドライン仕様 */
 static struct CommandLineParserSpecification command_line_spec[] = {
   { 'e', "encode", COMMAND_LINE_PARSER_FALSE, 
@@ -501,7 +498,7 @@ static void print_usage(const char* program_name)
 /* バージョン情報の表示 */
 static void print_version_info(void)
 {
-  printf("AAD(Ayashi Adaptive Differential pulse code modulation) encoder/decoder Version.%s \n", AADCUI_VERSION_STRING);
+  printf("AAD(Ayashi Adaptive Differential pulse code modulation) encoder/decoder Version.%d \n", AAD_CODEC_VERSION);
 }
 
 /* メインエントリ */
