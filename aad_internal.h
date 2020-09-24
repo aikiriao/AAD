@@ -44,6 +44,9 @@
 #define AAD_NUM_SAMPLES_IN_BLOCK(data_size, num_channels, bits_per_sample) \
   (AAD_FILTER_ORDER + AAD_NUM_SAMPLES_IN_DATA((data_size) - AAD_BLOCK_HEADER_SIZE(num_channels), (num_channels), (bits_per_sample)))
 
+/* 静的アサート */
+#define AAD_STATIC_ASSERT(expr) { extern char static_assertion_failed[(expr) ? 1 : -1]; }
+
 /* アサートマクロ */
 #ifdef DEBUG
 #define AAD_ASSERT(condition) assert(condition)

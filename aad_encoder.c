@@ -9,7 +9,7 @@
 struct AADEncodeProcessor {
   int16_t history[AAD_FILTER_ORDER];  /* 入力データ履歴 */
   int32_t weight[AAD_FILTER_ORDER];   /* フィルタ係数   */
-  uint8_t stepsize_index;             /* ステップサイズテーブルの参照インデックス */
+  int16_t stepsize_index;             /* ステップサイズテーブルの参照インデックス */
 };
 
 /* エンコーダ */
@@ -312,7 +312,7 @@ static uint8_t AADEncodeProcessor_EncodeSample(
     struct AADEncodeProcessor *processor, int32_t sample, uint8_t bits_per_sample)
 {
   uint8_t code;
-  int32_t idx;
+  int16_t idx;
   int32_t predict, diff, qdiff, delta, stepsize, diffabs, sign;
   int32_t quantize_sample, ord;
   const uint8_t signbit = (uint8_t)(1U << (bits_per_sample - 1));
@@ -325,7 +325,7 @@ static uint8_t AADEncodeProcessor_EncodeSample(
   idx = processor->stepsize_index;
 
   /* ステップサイズの取得 */
-  stepsize = AAD_stepsize_table[idx];
+  stepsize = AAD_TABLES_GET_STEPSIZE(idx);
 
   /* フィルタ予測 */
   predict = AAD_FIXEDPOINT_0_5;
@@ -356,25 +356,14 @@ static uint8_t AADEncodeProcessor_EncodeSample(
 
   /* インデックス更新 */
   switch (bits_per_sample) {
-    case 4:
-      AAD_ASSERT(code < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_4bit));
-      idx += AAD_index_table_4bit[code];
-      break;
-    case 3:
-      AAD_ASSERT(code < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_3bit)); 
-      idx += AAD_index_table_3bit[code];
-      break;
-    case 2:
-      AAD_ASSERT(code < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_2bit));
-      idx += AAD_index_table_2bit[code];
-      break;
+    case 4: AAD_TABLES_UPDATE_INDEX(4, idx, code); break;
+    case 3: AAD_TABLES_UPDATE_INDEX(3, idx, code); break;
+    case 2: AAD_TABLES_UPDATE_INDEX(2, idx, code); break;
     default: AAD_ASSERT(0);
   }
-  idx = AAD_INNER_VAL(idx, 0, (int32_t)(AAD_NUM_TABLE_ELEMENTS(AAD_stepsize_table) - 1));
 
   /* 計算結果の反映 */
-  AAD_ASSERT(idx <= UINT8_MAX);
-  processor->stepsize_index = (uint8_t)idx;
+  processor->stepsize_index = idx;
 
   /* 量子化後のサンプル値 */
   quantize_sample = qdiff + predict;
@@ -459,6 +448,7 @@ static AADApiResult AADEncoder_EncodeBlock(
   for (ch = 0; ch < header->num_channels; ch++) {
     /* シフト量の計算と右シフト */
     uint8_t shift;
+    uint16_t u16buf;
     int32_t maxabs = 0, mask;
     /* 最大の係数絶対値の探索 */
     for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
@@ -478,10 +468,12 @@ static AADApiResult AADEncoder_EncodeBlock(
     for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
       encoder->processor[ch].weight[smpl] &= mask;
     }
-    /* ステップサイズインデックス */
-    ByteArray_PutUint8(data_pos, encoder->processor[ch].stepsize_index);
-    /* 係数シフト量 */
-    ByteArray_PutUint8(data_pos, shift);
+    /* ステップサイズインデックス12bit + 係数シフト量4bit */
+    AAD_STATIC_ASSERT(AAD_TABLES_FLOAT_DIGITS == 4);
+    AAD_ASSERT(shift <= 0xF);
+    u16buf = (uint16_t)(encoder->processor[ch].stepsize_index << AAD_TABLES_FLOAT_DIGITS);
+    u16buf |= shift & 0xF;
+    ByteArray_PutUint16BE(data_pos, u16buf);
     /* フィルタの状態を出力 係数はシフトして記録 */
     for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
       AAD_ASSERT((encoder->processor[ch].weight[smpl] >> shift) <= INT16_MAX);

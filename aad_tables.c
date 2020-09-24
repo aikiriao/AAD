@@ -2,31 +2,76 @@
 #ifndef AAD_TABLES_C_INCLUDED
 #define AAD_TABLES_C_INCLUDED
 
+#include "aad_internal.h"
 #include <stdint.h>
 
+/* 固定小数部の桁数 */
+#define AAD_TABLES_FLOAT_DIGITS                   4
+/* 固定小数の0.5 */
+#define AAD_TABLES_FLOAT_0_5                      ((1 << AAD_TABLES_FLOAT_DIGITS) - 1)
+/* インデックス変動テーブルの要素定義マクロ */
+#define AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(flt)  (int16_t)((flt) * (1 << AAD_TABLES_FLOAT_DIGITS))
+/* 固定小数 -> ステップサイズテーブルインデックス */
+#define AAD_TABLES_FLOAT_TO_INDEX(flt)            (((flt) + AAD_TABLES_FLOAT_0_5) >> AAD_TABLES_FLOAT_DIGITS)
+/* ステップサイズテーブルインデックス -> 固定小数 */
+#define AAD_TABLES_INDEX_TO_FLOAT(idx)            ((idx) << AAD_TABLES_FLOAT_DIGITS)
+/* 固定小数表記されたインデックスの更新 */
+#define AAD_TABLES_UPDATE_INDEX(bps, flt, code) {                               \
+  AAD_ASSERT((code) < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_ ## bps ## bit));  \
+  (flt) += (AAD_index_table_ ## bps ## bit)[(code)];                            \
+  (flt) = AAD_INNER_VAL((flt), 0,                                               \
+      AAD_TABLES_INDEX_TO_FLOAT(                                                \
+        (int16_t)AAD_NUM_TABLE_ELEMENTS(AAD_stepsize_table) - 1));              \
+}
+/* ステップサイズ取得 */
+#define AAD_TABLES_GET_STEPSIZE(flt)              (AAD_stepsize_table[AAD_TABLES_FLOAT_TO_INDEX(flt)])
+
 /* インデックス変動テーブル: 4bit */
-static const int8_t AAD_index_table_4bit[16] = {
-  -1, -1, -1, 1, 2, 4, 8, 16, 
-  -1, -1, -1, 1, 2, 4, 8, 16, 
+static const int16_t AAD_index_table_4bit[16] = {
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 2),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 4),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 8),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(16),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 2),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 4),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 8),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(16),
 };
 
 /* インデックス変動テーブル: 3bit */
-static const int8_t AAD_index_table_3bit[8] = {
-  -1, -1, 2, 8,
-  -1, -1, 2, 8,
+static const int16_t AAD_index_table_3bit[8] = {
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 2),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 8),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 2),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 8),
 };
 
 /* インデックス変動テーブル: 2bit */
-static const int8_t AAD_index_table_2bit[4] = {
-  -1, 2,
-  -1, 2,
+static const int16_t AAD_index_table_2bit[4] = {
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 2),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 2),
 };
 
 #if 0
 /* インデックス変動テーブル: 1bit */
 /* Future work... */
-static const int8_t AAD_index_table_1bit[2] = {
-  -1, 2,
+static const int16_t AAD_index_table_1bit[2] = {
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(-1),
+  AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY( 2),
 };
 #endif
 
