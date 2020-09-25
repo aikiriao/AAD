@@ -747,7 +747,7 @@ AADApiResult AADEncoder_EncodeWhole(
   const struct AADHeaderInfo *header;
   double min_rmse;
   struct AADEncodeProcessor best_processor[AAD_MAX_NUM_CHANNELS];
-  struct AADEncodeProcessor tmp_processor[AAD_MAX_NUM_CHANNELS];
+  int16_t tmp_stepsize_index[AAD_MAX_NUM_CHANNELS];
 
   /* 引数チェック */
   if ((encoder == NULL) || (input == NULL)
@@ -805,8 +805,10 @@ AADApiResult AADEncoder_EncodeWhole(
         }
       }
       /* エンコード対象のブロック */
-      /* 候補プロセッサをバックアップ */
-      memcpy(&tmp_processor, encoder->processor, sizeof(struct AADEncodeProcessor) * AAD_MAX_NUM_CHANNELS);
+      /* ステップサイズは前のブロックと連続になるからここでの値を候補 */
+      for (ch = 0; ch < header->num_channels; ch++) {
+        tmp_stepsize_index[ch] = encoder->processor[ch].stepsize_index;
+      }
       /* エンコード試行 */
       if (AADEncoder_EncodeBlockTrial(
             encoder, input_ptr, num_encode_samples, &tmp_rmse) != AAD_ERROR_OK) {
@@ -815,7 +817,11 @@ AADApiResult AADEncoder_EncodeWhole(
       /* RMSE基準でプロセッサを選択 */
       if (min_rmse > tmp_rmse) {
         min_rmse = tmp_rmse;
-        memcpy(&best_processor, &tmp_processor, sizeof(struct AADEncodeProcessor) * AAD_MAX_NUM_CHANNELS);
+        /* 採用候補のプロセッサを記録 */
+        memcpy(&best_processor, encoder->processor, sizeof(struct AADEncodeProcessor) * AAD_MAX_NUM_CHANNELS);
+        for (ch = 0; ch < header->num_channels; ch++) {
+          best_processor[ch].stepsize_index = tmp_stepsize_index[ch];
+        }
       }
     }
     /* 最もRMSEの小さいプロセッサを採用 */
