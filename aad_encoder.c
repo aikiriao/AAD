@@ -4,12 +4,14 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 /* エンコード処理ハンドル */
 struct AADEncodeProcessor {
   int16_t history[AAD_FILTER_ORDER];  /* 入力データ履歴 */
   int32_t weight[AAD_FILTER_ORDER];   /* フィルタ係数   */
   int16_t stepsize_index;             /* ステップサイズテーブルの参照インデックス */
+  int32_t quantize_error;             /* 量子化誤差 */
 };
 
 /* エンコーダ */
@@ -364,6 +366,7 @@ static uint8_t AADEncodeProcessor_EncodeSample(
 
   /* 計算結果の反映 */
   processor->stepsize_index = idx;
+  processor->quantize_error = qdiff;
 
   /* 量子化後のサンプル値 */
   quantize_sample = qdiff + predict;
@@ -384,6 +387,85 @@ static uint8_t AADEncodeProcessor_EncodeSample(
 
   AAD_ASSERT(code <= AAD_MAX_CODE_VALUE);
   return code;
+}
+
+/* LR -> MS 変換（インターリーブ） */
+static void AADEncoder_LRtoMSInterleave(int32_t **buffer, uint32_t num_samples)
+{
+  uint32_t smpl;
+  int32_t mid, side;
+
+  AAD_ASSERT(buffer != NULL);
+  AAD_ASSERT((buffer[0] != NULL) && (buffer[1] != NULL));
+
+  /* 音が割れて誤差が増大するのを防ぐため、変換時に右シフト */
+  for (smpl = 0; smpl < num_samples; smpl++) {
+    mid  = (buffer[0][smpl] + buffer[1][smpl]) >> 1;
+    side = (buffer[0][smpl] - buffer[1][smpl]) >> 1;
+    buffer[0][smpl] = AAD_INNER_VAL(mid,  INT16_MIN, INT16_MAX);
+    buffer[1][smpl] = AAD_INNER_VAL(side, INT16_MIN, INT16_MAX);
+  }
+}
+
+/* 単一ブロックのエンコードを試行し、RMSEを計測 */
+static AADError AADEncoder_EncodeBlockTrial(
+    struct AADEncoder *encoder,
+    const int32_t *const *input, uint32_t num_samples, double *rmse)
+{
+  uint32_t ch, smpl;
+  double sum_squared_error;
+  int32_t *buffer[AAD_MAX_NUM_CHANNELS];
+  const struct AADHeaderInfo *header;
+
+  /* 引数チェック */
+  if ((encoder == NULL) || (input == NULL) || (rmse == NULL)) {
+    return AAD_ERROR_INVALID_ARGUMENT;
+  }
+  header = &(encoder->header);
+
+  /* サンプル数が少なすぎるときは誤差0とする（先頭サンプルで正確に予測できるから） */
+  if (num_samples < AAD_FILTER_ORDER) {
+    (*rmse) = 0.0f;
+    return AAD_ERROR_OK;
+  }
+
+  /* 入力をバッファにコピー */
+  for (ch = 0; ch < header->num_channels; ch++) {
+    /* ポインタ取得 */
+    buffer[ch] = encoder->input_buffer[ch];
+    memcpy(buffer[ch], input[ch], sizeof(int32_t) * num_samples);
+  }
+
+  /* LR -> MS */
+  if ((header->num_channels >= 2)
+      && (header->ch_process_method == AAD_CH_PROCESS_METHOD_MS)) {
+    AADEncoder_LRtoMSInterleave(buffer, num_samples);
+  }
+
+  /* EncodeBlockに倣い、フィルタに先頭サンプルをセット */
+  for (ch = 0; ch < header->num_channels; ch++) {
+    for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {
+      AAD_ASSERT(buffer[ch][smpl] <= INT16_MAX); AAD_ASSERT(buffer[ch][smpl] >= INT16_MIN);
+      encoder->processor[ch].history[AAD_FILTER_ORDER - smpl - 1] = (int16_t)buffer[ch][smpl];
+    }
+  }
+
+  /* 誤差計測 */
+  sum_squared_error = 0.0f;
+  for (ch = 0; ch < header->num_channels; ch++) {
+    struct AADEncodeProcessor *processor = &(encoder->processor[ch]);
+    for (smpl = AAD_FILTER_ORDER; smpl < num_samples; smpl++) {
+      /* サンプルエンコードを実行し状態更新 エンコード結果は捨てる */
+      AADEncodeProcessor_EncodeSample(processor,
+          buffer[ch][smpl], (uint8_t)encoder->header.bits_per_sample);
+      /* 量子化後の誤差を累積 */
+      sum_squared_error += processor->quantize_error * processor->quantize_error;
+    }
+  }
+
+  /* RMSEに変換 */
+  (*rmse) = sqrt(sum_squared_error / (header->num_channels * num_samples));
+  return AAD_ERROR_OK;
 }
 
 /* 単一データブロックエンコード */
@@ -421,14 +503,7 @@ static AADApiResult AADEncoder_EncodeBlock(
   /* LR -> MS */
   if ((header->num_channels >= 2)
       && (header->ch_process_method == AAD_CH_PROCESS_METHOD_MS)) {
-    int32_t mid, side;
-    /* 音が割れて誤差が増大するのを防ぐため、変換時に右シフト */
-    for (smpl = 0; smpl < num_samples; smpl++) {
-      mid  = (buffer[0][smpl] + buffer[1][smpl]) >> 1;
-      side = (buffer[0][smpl] - buffer[1][smpl]) >> 1;
-      buffer[0][smpl] = AAD_INNER_VAL(mid,  INT16_MIN, INT16_MAX);
-      buffer[1][smpl] = AAD_INNER_VAL(side, INT16_MIN, INT16_MAX);
-    }
+    AADEncoder_LRtoMSInterleave(buffer, num_samples);
   }
 
   /* フィルタに先頭サンプルをセット */
@@ -563,7 +638,7 @@ static AADError AADEncoder_ConvertParameterToHeader(
     const struct AADEncodeParameter *enc_param, uint32_t num_samples,
     struct AADHeaderInfo *header_info)
 {
-  struct AADHeaderInfo tmp_header = {0, };
+  struct AADHeaderInfo tmp_header = { 0, };
 
   /* 引数チェック */
   if ((enc_param == NULL) || (header_info == NULL)) {
@@ -651,6 +726,9 @@ AADApiResult AADEncoder_EncodeWhole(
   uint8_t *data_pos;
   const int32_t *input_ptr[AAD_MAX_NUM_CHANNELS];
   const struct AADHeaderInfo *header;
+  double min_rmse;
+  struct AADEncodeProcessor best_processor[AAD_MAX_NUM_CHANNELS];
+  struct AADEncodeProcessor tmp_processor[AAD_MAX_NUM_CHANNELS];
 
   /* 引数チェック */
   if ((encoder == NULL) || (input == NULL)
@@ -688,26 +766,47 @@ AADApiResult AADEncoder_EncodeWhole(
     for (ch = 0; ch < header->num_channels; ch++) {
       input_ptr[ch] = &input[ch][progress];
     }
-    /* 適応を早めるために連続するブロックを複数回エンコード */
+
+    /* 連続したブロックを複数回エンコードし、最小のRMSEを持つプロセッサを探す */
+    /* memo: 複数回エンコードすることでフィルタの適応が早まる。
+     * ただし、繰り返した分だけ単調に誤差が小さくなるとは限らないため、最も誤差の小さいプロセッサを採用 */
+    min_rmse = (double)INT16_MAX;
+    AAD_ASSERT(encoder->num_encode_trials > 0);
     for (trial = 0; trial < encoder->num_encode_trials; trial++) {
+      double tmp_rmse;
       /* 前のブロック */
       if (progress >= header->num_samples_per_block) {
         const int32_t *prev_input_ptr[AAD_MAX_NUM_CHANNELS];
         for (ch = 0; ch < header->num_channels; ch++) {
           prev_input_ptr[ch] = &input[ch][progress - header->num_samples_per_block];
         }
-        if ((ret = AADEncoder_EncodeBlock(encoder,
-                prev_input_ptr, header->num_samples_per_block,
-                data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
-          return ret;
+        if (AADEncoder_EncodeBlockTrial(
+              encoder, prev_input_ptr, header->num_samples_per_block, &tmp_rmse) != AAD_ERROR_OK) {
+          return AAD_APIRESULT_NG;
         }
       }
       /* エンコード対象のブロック */
-      if ((ret = AADEncoder_EncodeBlock(encoder,
-              input_ptr, num_encode_samples,
-              data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
-        return ret;
+      /* 候補プロセッサをバックアップ */
+      memcpy(&tmp_processor, encoder->processor, sizeof(struct AADEncodeProcessor) * AAD_MAX_NUM_CHANNELS);
+      /* エンコード試行 */
+      if (AADEncoder_EncodeBlockTrial(
+            encoder, input_ptr, num_encode_samples, &tmp_rmse) != AAD_ERROR_OK) {
+        return AAD_APIRESULT_NG;
       }
+      /* RMSE基準でプロセッサを選択 */
+      if (min_rmse > tmp_rmse) {
+        min_rmse = tmp_rmse;
+        memcpy(&best_processor, &tmp_processor, sizeof(struct AADEncodeProcessor) * AAD_MAX_NUM_CHANNELS);
+      }
+    }
+    /* 最もRMSEの小さいプロセッサを採用 */
+    memcpy(encoder->processor, &best_processor, sizeof(struct AADEncodeProcessor) * AAD_MAX_NUM_CHANNELS);
+
+    /* 実際のエンコード処理 */
+    if ((ret = AADEncoder_EncodeBlock(encoder,
+            input_ptr, num_encode_samples,
+            data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
+      return ret;
     }
     /* 進捗更新 */
     data_pos      += write_size;
