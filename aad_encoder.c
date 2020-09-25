@@ -818,14 +818,14 @@ AADApiResult AADEncoder_EncodeWhole(
       if (min_rmse > tmp_rmse) {
         min_rmse = tmp_rmse;
         /* 採用候補のプロセッサを記録 */
-        memcpy(&best_processor, encoder->processor, sizeof(struct AADEncodeProcessor) * AAD_MAX_NUM_CHANNELS);
+        memcpy(&best_processor, encoder->processor, sizeof(struct AADEncodeProcessor) * header->num_channels);
         for (ch = 0; ch < header->num_channels; ch++) {
           best_processor[ch].stepsize_index = tmp_stepsize_index[ch];
         }
       }
     }
     /* 最もRMSEの小さいプロセッサを採用 */
-    memcpy(encoder->processor, &best_processor, sizeof(struct AADEncodeProcessor) * AAD_MAX_NUM_CHANNELS);
+    memcpy(encoder->processor, &best_processor, sizeof(struct AADEncodeProcessor) * header->num_channels);
 
     /* 実際のエンコード処理 */
     if ((ret = AADEncoder_EncodeBlock(encoder,
