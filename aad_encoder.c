@@ -25,6 +25,12 @@ struct AADEncoder {
   void                      *work;
 };
 
+/* 最大公約数の計算 */
+static uint32_t AADEncoder_CalculateGCD(uint32_t a, uint32_t b);
+
+/* 最小公倍数の計算 */
+static uint32_t AADEncoder_CalculateLCM(uint32_t a, uint32_t b);
+
 /* エンコード処理ハンドルのリセット */
 static void AADEncodeProcessor_Reset(struct AADEncodeProcessor *processor);
 
@@ -32,11 +38,24 @@ static void AADEncodeProcessor_Reset(struct AADEncodeProcessor *processor);
 static uint8_t AADEncodeProcessor_EncodeSample(
     struct AADEncodeProcessor *processor, int32_t sample, uint8_t bits_per_sample);
 
+/* LR -> MS 変換（インターリーブ） */
+static void AADEncoder_LRtoMSInterleave(int32_t **buffer, uint32_t num_samples);
+
+/* 単一ブロックのエンコードを試行し、RMSEを計測 */
+static AADError AADEncoder_EncodeBlockTrial(
+    struct AADEncoder *encoder,
+    const int32_t *const *input, uint32_t num_samples, double *rmse);
+
 /* 単一データブロックエンコード */
 static AADApiResult AADEncoder_EncodeBlock(
     struct AADEncoder *encoder,
     const int32_t *const *input, uint32_t num_samples, 
     uint8_t *data, uint32_t data_size, uint32_t *output_size);
+
+/* エンコードパラメータをヘッダに変換 */
+static AADError AADEncoder_ConvertParameterToHeader(
+    const struct AADEncodeParameter *enc_param, uint32_t num_samples,
+    struct AADHeaderInfo *header_info);
 
 /* テーブル */
 #include "aad_tables.c"
