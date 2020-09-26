@@ -4,6 +4,42 @@
 
 Ayashi Adaptive Differential pulse code modulation encoder / decoder
 
-## License
+This is the lossy audio codec inspired by IMA-ADPCM and ITU-T G.726.
+
+# Usage
+
+## How to build
+
+```bash
+git clone https://github.com/aikiriao/AAD.git
+cd AAD
+make
+```
+
+## Endode/Decode
+
+### Encode
+
+```bash
+./aad -e INPUT.wav OUTPUT.aad
+```
+
+By default, AAD convert wav to 4-bit/sample ADPCM. Please use `-b` option to change bit/sample.
+
+### Decode
+
+```bash
+./aad -d INPUT.aad OUTPUT.wav
+```
+
+## More applications
+
+Type `-h` option to display usages for other modes.
+
+```bash
+./aad -h
+```
+
+# License
 
 Copyright (c) 2020 aikiriao Licensed under the WTFPL license.
