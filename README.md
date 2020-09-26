@@ -26,7 +26,7 @@ make
 
 By default, AAD convert wav to 4-bit/sample ADPCM. Please use `-b` option to change bit/sample.
 
-Example for 3bit/sample encode:
+Example for 3-bit/sample encode:
 
 ```bash
 ./aad -e -b 3 INPUT.wav OUTPUT.aad
