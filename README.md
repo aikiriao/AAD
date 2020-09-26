@@ -4,7 +4,7 @@
 
 Ayashi Adaptive Differential pulse code modulation encoder / decoder
 
-This is the lossy audio codec inspired by IMA-ADPCM and ITU-T G.726.
+This is a lossy audio codec inspired by IMA-ADPCM and ITU-T G.726.
 
 # Usage
 
