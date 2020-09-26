@@ -719,9 +719,6 @@ AADApiResult AADEncoder_SetEncodeParameter(
   }
 
   /* エンコード繰り返し回数のセット */
-  if (parameter->num_encode_trials == 0) {
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
   encoder->num_encode_trials = parameter->num_encode_trials;
 
   /* ヘッダ設定 */
@@ -790,9 +787,18 @@ AADApiResult AADEncoder_EncodeWhole(
     /* memo: 複数回エンコードすることでフィルタの適応が早まる。
      * ただし、繰り返した分だけ単調に誤差が小さくなるとは限らないため、最も誤差の小さいプロセッサを採用 */
     min_rmse = (double)INT16_MAX;
-    AAD_ASSERT(encoder->num_encode_trials > 0);
     for (trial = 0; trial < encoder->num_encode_trials; trial++) {
       double tmp_rmse;
+      /* 評価基準のプロセッサを記録 */
+      if (trial == 0) {
+        memcpy(&best_processor, encoder->processor, sizeof(struct AADEncodeProcessor) * header->num_channels);
+        if (AADEncoder_EncodeBlockTrial(
+              encoder, input_ptr, num_encode_samples, &min_rmse) != AAD_ERROR_OK) {
+          return AAD_APIRESULT_NG;
+        }
+        /* AADEncoder_EncodeBlockTrialに副作用があるので戻す */
+        memcpy(encoder->processor, &best_processor, sizeof(struct AADEncodeProcessor) * header->num_channels);
+      }
       /* 前のブロック */
       if (progress >= header->num_samples_per_block) {
         const int32_t *prev_input_ptr[AAD_MAX_NUM_CHANNELS];
@@ -824,8 +830,10 @@ AADApiResult AADEncoder_EncodeWhole(
         }
       }
     }
-    /* 最もRMSEの小さいプロセッサを採用 */
-    memcpy(encoder->processor, &best_processor, sizeof(struct AADEncodeProcessor) * header->num_channels);
+    if (encoder->num_encode_trials > 0) {
+      /* 最もRMSEの小さいプロセッサを採用 */
+      memcpy(encoder->processor, &best_processor, sizeof(struct AADEncodeProcessor) * header->num_channels);
+    }
 
     /* 実際のエンコード処理 */
     if ((ret = AADEncoder_EncodeBlock(encoder,
