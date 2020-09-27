@@ -488,7 +488,6 @@ static AADError AADEncoder_SearchBestProcessor(
   struct AADEncodeProcessor tmp_best[AAD_MAX_NUM_CHANNELS];
   int32_t *buffer[AAD_MAX_NUM_CHANNELS];
   int32_t *prev_buffer[AAD_MAX_NUM_CHANNELS];
-  int16_t tmp_stepsize_index;
   const struct AADHeaderInfo *header;
   AADError err;
 
@@ -541,6 +540,7 @@ static AADError AADEncoder_SearchBestProcessor(
    * ただし、繰り返した分だけ単調に誤差が小さくなるとは限らないため（過学習など）、最も誤差の小さいプロセッサを採用 */
   for (ch = 0; ch < header->num_channels; ch++) {
     struct AADEncodeProcessor tmp_processor = encoder->processor[ch];
+    struct AADEncodeProcessor candidate;
     for (trial = 0; trial < encoder->num_encode_trials; trial++) {
       double tmp_rmse;
       /* 直前のブロック */
@@ -551,8 +551,8 @@ static AADError AADEncoder_SearchBestProcessor(
           return err;
         }
       }
-      /* ステップサイズは前のブロックとのつながりを考えエンコード前の値を候補に */
-      tmp_stepsize_index = tmp_processor.stepsize_index;
+      /* 採用候補のプロセッサはここでの設定値を用いる */
+      candidate = tmp_processor;
       /* エンコード対象のブロックのRMSEを計測 */
       if ((err = AADEncodeProcessor_CalculateRMSError(
             &tmp_processor, buffer[ch], 
@@ -562,10 +562,7 @@ static AADError AADEncoder_SearchBestProcessor(
       /* RMSE基準でプロセッサを選択 */
       if (min_rmse[ch] > tmp_rmse) {
         min_rmse[ch] = tmp_rmse;
-        /* 採用候補のプロセッサを記録 */
-        memcpy(&tmp_best[ch].weight,  &(tmp_processor.weight), sizeof(int32_t) * AAD_FILTER_ORDER);
-        memcpy(&tmp_best[ch].history, &(tmp_processor.history), sizeof(int16_t) * AAD_FILTER_ORDER);
-        tmp_best[ch].stepsize_index = tmp_stepsize_index;
+        tmp_best[ch] = candidate;
       }
     }
   }
