@@ -8,7 +8,7 @@
 /* 固定小数部の桁数 */
 #define AAD_TABLES_FLOAT_DIGITS                   4
 /* 固定小数の0.5 */
-#define AAD_TABLES_FLOAT_0_5                      ((1 << AAD_TABLES_FLOAT_DIGITS) - 1)
+#define AAD_TABLES_FLOAT_0_5                      (1 << (AAD_TABLES_FLOAT_DIGITS - 1))
 /* インデックス変動テーブルの要素定義マクロ */
 #define AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(flt)  (int16_t)((flt) * (1 << AAD_TABLES_FLOAT_DIGITS))
 /* 固定小数 -> ステップサイズテーブルインデックス */
