@@ -104,6 +104,27 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
 
     /* 読み出した結果がリファレンスと一致するか？ */
     Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
+    /* ビッグエンディアンでも */
+
+    /* 書き出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT16; i++) {
+      answer[i] = (uint16_t)i;
+      ByteArray_WriteUint16BE(pos, (uint16_t)i);
+      pos += 2;
+    }
+
+    /* 読み出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT16; i++) {
+      test[i] = ByteArray_ReadUint16BE(pos);
+      pos += 2;
+    }
+
+    /* 読み出した結果がリファレンスと一致するか？ */
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
 #undef TEST_SIZE_UINT16
   }
   /* 同じことをGet/Putでやる */
@@ -129,6 +150,25 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
 
     /* 読み出した結果がリファレンスと一致するか？ */
     Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
+    /* ビッグエンディアンでも */
+
+    /* 書き出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT16; i++) {
+      answer[i] = (uint16_t)i;
+      ByteArray_PutUint16BE(pos, (uint16_t)i);
+    }
+
+    /* 読み出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT16; i++) {
+      ByteArray_GetUint16BE(pos, &test[i]);
+    }
+
+    /* 読み出した結果がリファレンスと一致するか？ */
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
 #undef TEST_SIZE_UINT16
   }
 
@@ -157,8 +197,30 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
 
     /* 読み出した結果がリファレンスと一致するか？ */
     Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
+    /* ビッグエンディアンでも */
+
+    /* 書き出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT32; i++) {
+      answer[i] = (uint32_t)i;
+      ByteArray_WriteUint32BE(pos, (uint32_t)i);
+      pos += 4;
+    }
+
+    /* 読み出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT32; i++) {
+      test[i] = ByteArray_ReadUint32BE(pos);
+      pos += 4;
+    }
+
+    /* 読み出した結果がリファレンスと一致するか？ */
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
 #undef TEST_SIZE_UINT32
   }
+
   /* 同じことをGet/Putでやる */
   {
 #define TEST_SIZE_UINT32 (TEST_SIZE / sizeof(uint32_t))
@@ -182,6 +244,25 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
 
     /* 読み出した結果がリファレンスと一致するか？ */
     Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
+    /* ビッグエンディアンでもやる */
+
+    /* 書き出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT32; i++) {
+      answer[i] = (uint32_t)i;
+      ByteArray_PutUint32BE(pos, (uint32_t)i);
+    }
+
+    /* 読み出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT32; i++) {
+      ByteArray_GetUint32BE(pos, &test[i]);
+    }
+
+    /* 読み出した結果がリファレンスと一致するか？ */
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
 #undef TEST_SIZE_UINT16
   }
 
