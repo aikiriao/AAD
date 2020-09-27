@@ -654,7 +654,7 @@ static AADApiResult AADEncoder_EncodeBlock(
     AAD_STATIC_ASSERT(AAD_TABLES_FLOAT_DIGITS == 4);
     AAD_ASSERT(shift <= 0xF);
     u16buf = (uint16_t)(encoder->processor[ch].stepsize_index << AAD_TABLES_FLOAT_DIGITS);
-    u16buf |= shift & 0xF;
+    u16buf = (uint16_t)(u16buf | (shift & 0xF));
     ByteArray_PutUint16BE(data_pos, u16buf);
     /* フィルタの状態を出力 係数はシフトして記録 */
     for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {

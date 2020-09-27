@@ -318,7 +318,7 @@ AADApiResult AADDecoder_DecodeBlock(
     /* ステップサイズインデックス12bit + 係数シフト量4bit */
     AAD_STATIC_ASSERT(AAD_TABLES_FLOAT_DIGITS == 4);
     ByteArray_GetUint16BE(read_pos, &u16buf);
-    decoder->processor[ch].stepsize_index = u16buf >> AAD_TABLES_FLOAT_DIGITS;
+    decoder->processor[ch].stepsize_index = (int16_t)(u16buf >> AAD_TABLES_FLOAT_DIGITS);
     shift = u16buf & 0xF;
     /* フィルタの状態 */
     for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {

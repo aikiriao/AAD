@@ -18,7 +18,7 @@
 /* 固定小数表記されたインデックスの更新 */
 #define AAD_TABLES_UPDATE_INDEX(bps, flt, code) {                               \
   AAD_ASSERT((code) < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_ ## bps ## bit));  \
-  (flt) += (AAD_index_table_ ## bps ## bit)[(code)];                            \
+  (flt) = (int16_t)((flt) + (AAD_index_table_ ## bps ## bit)[(code)]);          \
   (flt) = AAD_INNER_VAL((flt), 0,                                               \
       AAD_TABLES_INDEX_TO_FLOAT(                                                \
         (int16_t)AAD_NUM_TABLE_ELEMENTS(AAD_stepsize_table) - 1));              \
