@@ -70,10 +70,7 @@ static void AADEncodeDecodeTest_EncodeDecodeHeaderTest(void *obj)
 
 /* 与えられたPCMデータに対するエンコードデコードテスト 成功時は1を、失敗時は0を返す */
 static uint8_t AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(
-    int32_t **input, 
-    uint32_t num_channels, uint32_t num_samples,
-    uint16_t bits_per_sample, uint16_t block_size, AADChannelProcessMethod ch_process_method,
-    uint8_t num_encode_trials,
+    int32_t **input, uint32_t num_samples, const struct AADEncodeParameter *enc_param,
     double rms_epsilon)
 {
   int32_t *decoded[AAD_MAX_NUM_CHANNELS];
@@ -81,41 +78,34 @@ static uint8_t AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(
   uint8_t *buffer;
   double rms_error;
   uint8_t is_ok;
-  struct AADEncodeParameter enc_param;
   struct AADEncoder *encoder;
   struct AADDecoder *decoder;
 
   assert(input != NULL);
   assert(input[0] != NULL);
-  assert(num_channels <= AAD_MAX_NUM_CHANNELS);
+  assert(enc_param->num_channels <= AAD_MAX_NUM_CHANNELS);
 
   /* 出力データの領域割当て */
-  for (ch = 0; ch < num_channels; ch++) {
+  for (ch = 0; ch < enc_param->num_channels; ch++) {
     decoded[ch] = (int32_t *)malloc(sizeof(int32_t) * num_samples);
   }
   /* 入力wavと同じサイズの出力領域を確保（増えることはないと期待） */
-  buffer_size = num_channels * num_samples * sizeof(int32_t);
+  buffer_size = enc_param->num_channels * num_samples * sizeof(int32_t);
   buffer = (uint8_t *)malloc(buffer_size);
 
   /* 出力データ領域をクリア */
-  for (ch = 0; ch < num_channels; ch++) {
+  for (ch = 0; ch < enc_param->num_channels; ch++) {
     for (smpl = 0; smpl < num_samples; smpl++) {
       decoded[ch][smpl] = 0;
     }
   }
 
   /* ハンドル作成 */
-  encoder = AADEncoder_Create(block_size, NULL, 0);
+  encoder = AADEncoder_Create(enc_param->max_block_size, NULL, 0);
   decoder = AADDecoder_Create(NULL, 0);
 
   /* エンコードパラメータをセット */
-  enc_param.num_channels        = num_channels;
-  enc_param.sampling_rate       = 8000;
-  enc_param.bits_per_sample     = bits_per_sample;
-  enc_param.max_block_size      = block_size;
-  enc_param.ch_process_method   = ch_process_method;
-  enc_param.num_encode_trials   = num_encode_trials;
-  if (AADEncoder_SetEncodeParameter(encoder, &enc_param) != AAD_APIRESULT_OK) {
+  if (AADEncoder_SetEncodeParameter(encoder, enc_param) != AAD_APIRESULT_OK) {
     is_ok = 0;
     goto CHECK_END;
   }
@@ -134,14 +124,14 @@ static uint8_t AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(
 
   /* デコード */
   if (AADDecoder_DecodeWhole(
-        decoder, buffer, output_size, decoded, num_channels, num_samples) != AAD_APIRESULT_OK) {
+        decoder, buffer, output_size, decoded, enc_param->num_channels, num_samples) != AAD_APIRESULT_OK) {
     is_ok = 0;
     goto CHECK_END;
   }
 
   /* ロスがあるのでRMSE基準でチェック */
   rms_error = 0.0;
-  for (ch = 0; ch < num_channels; ch++) {
+  for (ch = 0; ch < enc_param->num_channels; ch++) {
     for (smpl = 0; smpl < num_samples; smpl++) {
       double pcm1, pcm2, abs_error;
       pcm1 = (double)input[ch][smpl] / INT16_MAX;
@@ -150,11 +140,10 @@ static uint8_t AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(
       rms_error += abs_error * abs_error;
     }
   }
-  rms_error = sqrt(rms_error / (num_samples * num_channels));
+  rms_error = sqrt(rms_error / (num_samples * enc_param->num_channels));
 
   /* 誤差チェック */
   if (rms_error >= rms_epsilon) {
-    printf("%f \n", rms_error);
     is_ok = 0;
     goto CHECK_END;
   }
@@ -167,7 +156,7 @@ CHECK_END:
   AADEncoder_Destroy(encoder);
   AADDecoder_Destroy(decoder);
   free(buffer);
-  for (ch = 0; ch < num_channels; ch++) {
+  for (ch = 0; ch < enc_param->num_channels; ch++) {
     free(decoded[ch]);
   }
 
@@ -301,15 +290,10 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
 #define MAX_NUM_CHANNELS  AAD_MAX_NUM_CHANNELS
 #define MAX_NUM_SAMPLES   2048
     /* テストケース */
-    /* FIXME: エンコードパラメータを直接含めよ */
     struct EncodeDecodeTestForPcmDataTestCase {
-      uint32_t                num_channels;
-      uint32_t                num_samples;
-      uint16_t                bits_per_sample;
-      uint16_t                block_size;
-      AADChannelProcessMethod ch_process_method;
-      uint8_t                 num_encode_trials;
-      double                  rms_epsilon;
+      uint32_t                  num_samples;
+      struct AADEncodeParameter enc_param;
+      double                    rms_epsilon;
     };
     int32_t *input[MAX_NUM_CHANNELS];
     uint32_t ch, smpl, i;
@@ -317,87 +301,122 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
 
     /* 正弦波向けテストケースリスト */
     const struct EncodeDecodeTestForPcmDataTestCase test_case_for_sin[] = {
-      { 1, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 5.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 5.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_MS,   0, 5.0e-2 },
-      { 1, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 5.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 5.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   0, 5.0e-2 },
-      { 1, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 6.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 6.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_MS,   0, 6.0e-2 },
-      { 1, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 6.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 6.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   0, 6.0e-2 },
-      { 1, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 8.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 8.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_MS,   0, 8.0e-2 },
-      { 1, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 8.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 8.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   0, 8.0e-2 },
-
-      { 1, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1, 5.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1, 5.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_MS,   1, 5.0e-2 },
-      { 1, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1, 5.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1, 5.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   1, 5.0e-2 },
-      { 1, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1, 6.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1, 6.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_MS,   1, 6.0e-2 },
-      { 1, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1, 6.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1, 6.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   1, 6.0e-2 },
-      { 1, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 1, 8.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 1, 8.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_MS,   1, 8.0e-2 },
-      { 1, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 1, 8.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 1, 8.0e-2 },
-      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   1, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 128,  AAD_CH_PROCESS_METHOD_NONE, 0 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 128,  AAD_CH_PROCESS_METHOD_MS,   0 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   0 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_MS,   0 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   0 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_MS,   0 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   0 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4,  128, AAD_CH_PROCESS_METHOD_MS,   1 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   1 }, 5.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_MS,   1 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   1 }, 6.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_MS,   1 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 8.0e-2 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   1 }, 8.0e-2 },
     };
 
     /* 白色雑音向けテストケースリスト */
     const struct EncodeDecodeTestForPcmDataTestCase test_case_for_white_noise[] = {
-      { 1, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 1.0e-1 },
-      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 1.0e-1 },
-      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_MS,   0, 1.0e-1 },
-      { 1, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 1.0e-1 },
-      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 1.0e-1 },
-      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   0, 1.0e-1 },
-      { 1, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 1.5e-1 },
-      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 1.5e-1 },
-      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_MS,   0, 1.5e-1 },
-      { 1, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 1.5e-1 },
-      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 1.5e-1 },
-      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   0, 1.5e-1 },
-      { 1, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 2.4e-1 },
-      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 2.4e-1 },
-      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_MS,   0, 2.4e-1 },
-      { 1, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 2.4e-1 },
-      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 2.4e-1 },
-      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   0, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4,  128, AAD_CH_PROCESS_METHOD_MS,   0 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   0 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_MS,   0 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   0 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_MS,   0 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   0 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4,  128, AAD_CH_PROCESS_METHOD_MS,   1 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   1 }, 1.0e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_MS,   1 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   1 }, 1.5e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_MS,   1 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 2.4e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   1 }, 2.4e-1 },
     };
 
     /* ナイキスト振動波向けテストケースリスト */
     const struct EncodeDecodeTestForPcmDataTestCase test_case_for_nyquist[] = {
-      { 1, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 1.2e-1 },
-      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 1.2e-1 },
-      { 2, MAX_NUM_SAMPLES, 4,  128, AAD_CH_PROCESS_METHOD_MS,   0, 1.2e-1 },
-      { 1, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 1.2e-1 },
-      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 1.2e-1 },
-      { 2, MAX_NUM_SAMPLES, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   0, 1.2e-1 },
-      { 1, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 1.6e-1 },
-      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 1.6e-1 },
-      { 2, MAX_NUM_SAMPLES, 3,  128, AAD_CH_PROCESS_METHOD_MS,   0, 1.6e-1 },
-      { 1, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 1.6e-1 },
-      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 1.6e-1 },
-      { 2, MAX_NUM_SAMPLES, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   0, 1.6e-1 },
-      { 1, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 2.3e-1 },
-      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0, 2.3e-1 },
-      { 2, MAX_NUM_SAMPLES, 2,  128, AAD_CH_PROCESS_METHOD_MS,   0, 2.3e-1 },
-      { 1, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 2.3e-1 },
-      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0, 2.3e-1 },
-      { 2, MAX_NUM_SAMPLES, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   0, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4,  128, AAD_CH_PROCESS_METHOD_MS,   0 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   0 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_MS,   0 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   0 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 0 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_MS,   0 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 0 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   0 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4,  128, AAD_CH_PROCESS_METHOD_MS,   1 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 4, 1024, AAD_CH_PROCESS_METHOD_MS,   1 }, 1.2e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3,  128, AAD_CH_PROCESS_METHOD_MS,   1 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 3, 1024, AAD_CH_PROCESS_METHOD_MS,   1 }, 1.6e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_NONE, 1 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2,  128, AAD_CH_PROCESS_METHOD_MS,   1 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 1, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_NONE, 1 }, 2.3e-1 },
+      { MAX_NUM_SAMPLES, { 2, 8000, 2, 1024, AAD_CH_PROCESS_METHOD_MS,   1 }, 2.3e-1 },
     };
 
     /* 出力データの領域割当て */
@@ -417,9 +436,7 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
     for (i = 0; i < sizeof(test_case_for_sin) / sizeof(test_case_for_sin[0]); i++) {
       const struct EncodeDecodeTestForPcmDataTestCase *pcase = &test_case_for_sin[i];
       if (AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 
-            pcase->num_channels, pcase->num_samples, pcase->bits_per_sample,
-            pcase->block_size, pcase->ch_process_method, pcase->num_encode_trials,
-            pcase->rms_epsilon) != 1) {
+            pcase->num_samples, &pcase->enc_param, pcase->rms_epsilon) != 1) {
         is_ok = 0;
         break;
       }
@@ -439,9 +456,7 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
     for (i = 0; i < sizeof(test_case_for_white_noise) / sizeof(test_case_for_white_noise[0]); i++) {
       const struct EncodeDecodeTestForPcmDataTestCase *pcase = &test_case_for_white_noise[i];
       if (AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 
-            pcase->num_channels, pcase->num_samples, pcase->bits_per_sample,
-            pcase->block_size, pcase->ch_process_method, pcase->num_encode_trials,
-            pcase->rms_epsilon) != 1) {
+            pcase->num_samples, &pcase->enc_param, pcase->rms_epsilon) != 1) {
         is_ok = 0;
         break;
       }
@@ -460,9 +475,7 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
     for (i = 0; i < sizeof(test_case_for_nyquist) / sizeof(test_case_for_nyquist[0]); i++) {
       const struct EncodeDecodeTestForPcmDataTestCase *pcase = &test_case_for_nyquist[i];
       if (AADEncodeDecodeTest_EncodeDecodeCheckForPcmData(input, 
-            pcase->num_channels, pcase->num_samples, pcase->bits_per_sample,
-            pcase->block_size, pcase->ch_process_method, pcase->num_encode_trials,
-            pcase->rms_epsilon) != 1) {
+            pcase->num_samples, &pcase->enc_param, pcase->rms_epsilon) != 1) {
         is_ok = 0;
         break;
       }
@@ -482,7 +495,6 @@ static void AADEncodeDecodeTest_EncodeDecodeTest(void *obj)
     uint8_t   is_ok;
 
     /* テストケース */
-    /* FIXME: エンコードパラメータを直接含めよ */
     struct EncodeDecodeTestForWavFileTestCase {
       const char              *filename;
       uint16_t                bits_per_sample;
