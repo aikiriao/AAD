@@ -159,7 +159,7 @@ AADApiResult AADDecoder_DecodeHeader(
   tmp_header_info.sampling_rate = u32buf;
   /* サンプルあたりビット数 */
   ByteArray_GetUint16BE(data_pos, &u16buf);
-  if ((u16buf == 0) || (u16buf > AAD_MAX_BITS_PER_SAMPLE)) {
+  if ((u16buf < AAD_MIN_BITS_PER_SAMPLE) || (u16buf > AAD_MAX_BITS_PER_SAMPLE)) {
     return AAD_APIRESULT_INVALID_FORMAT;
   }
   tmp_header_info.bits_per_sample = u16buf;

@@ -165,9 +165,9 @@ AADApiResult AADEncoder_EncodeHeader(
     return AAD_APIRESULT_INVALID_FORMAT;
   }
   /* ビット深度 */
-  switch (header_info->bits_per_sample) {
-    case 2: case 3: case 4: break;
-    default: return AAD_APIRESULT_INVALID_FORMAT;
+  if ((header_info->bits_per_sample > AAD_MAX_BITS_PER_SAMPLE)
+      || (header_info->bits_per_sample < AAD_MIN_BITS_PER_SAMPLE)) {
+    return AAD_APIRESULT_INVALID_FORMAT;
   }
   /* ブロックサイズ */
   if (header_info->block_size <= AAD_BLOCK_HEADER_SIZE(header_info->num_channels)) {
