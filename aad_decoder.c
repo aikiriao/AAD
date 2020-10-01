@@ -60,6 +60,7 @@ struct AADDecoder *AADDecoder_Create(void *work, int32_t work_size)
   /* アラインメントを揃えてから構造体を配置 */
   work_ptr = (uint8_t *)AAD_ROUND_UP((uintptr_t)work_ptr, AAD_ALIGNMENT);
   decoder = (struct AADDecoder *)work_ptr;
+  work_ptr += sizeof(struct AADDecoder);
 
   /* デコード処理ハンドルのリセット */
   for (ch = 0; ch < AAD_MAX_NUM_CHANNELS; ch++) {
