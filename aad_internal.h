@@ -1,16 +1,16 @@
 #ifndef AAD_INTERNAL_H_INCLUDED
 #define AAD_INTERNAL_H_INCLUDED
 
-#include <assert.h>
+#include "aad.h"
 
 /* メモリアラインメント */
 #define AAD_ALIGNMENT                 16
 
 /* エンコード/デコード時に使用する定数 */
-#define AAD_FILTER_ORDER              4                                   /* フィルタ係数長     */
-#define AAD_FIXEDPOINT_DIGITS         15                                  /* 固定小数点の小数桁 */
-#define AAD_FIXEDPOINT_0_5            (1 << (AAD_FIXEDPOINT_DIGITS - 1))  /* 固定小数点の0.5    */
-#define AAD_LMSFILTER_SHIFT           3                                   /* LMSフィルタ係数更新時のシフト量 */
+#define AAD_FILTER_ORDER              4                                   /* フィルタ係数長                   */
+#define AAD_FIXEDPOINT_DIGITS         15                                  /* 固定小数点の小数桁               */
+#define AAD_FIXEDPOINT_0_5            (1 << (AAD_FIXEDPOINT_DIGITS - 1))  /* 固定小数点の0.5                  */
+#define AAD_LMSFILTER_SHIFT           3                                   /* LMSフィルタ係数更新時のシフト量  */
 
 /* 最大の符号値 */
 #define AAD_MAX_CODE_VALUE            ((1 << AAD_MAX_BITS_PER_SAMPLE) - 1)
@@ -49,6 +49,7 @@
 
 /* アサートマクロ */
 #ifdef DEBUG
+#include <assert.h>
 #define AAD_ASSERT(condition) assert(condition)
 #else
 #define AAD_ASSERT(condition) (void)(condition)
