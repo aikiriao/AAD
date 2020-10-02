@@ -16,12 +16,33 @@
 /* ステップサイズテーブルインデックス -> 固定小数 */
 #define AAD_TABLES_INDEX_TO_FLOAT(idx)            ((idx) << AAD_TABLES_FLOAT_DIGITS)
 /* 固定小数表記されたインデックスの更新 */
-#define AAD_TABLES_UPDATE_INDEX(bps, flt, code) {                               \
-  AAD_ASSERT((code) < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_ ## bps ## bit));  \
-  (flt) = (int16_t)((flt) + (AAD_index_table_ ## bps ## bit)[(code)]);          \
-  (flt) = AAD_INNER_VAL((flt), 0,                                               \
-      AAD_TABLES_INDEX_TO_FLOAT(                                                \
-        (int16_t)AAD_NUM_TABLE_ELEMENTS(AAD_stepsize_table) - 1));              \
+#define AAD_TABLES_UPDATE_INDEX(flt, code, bits_per_sample) {             \
+  const int16_t *ptable__;                                                \
+  /* テーブルの選択 */                                                    \
+  switch (bits_per_sample) {                                              \
+    case 4:                                                               \
+      AAD_ASSERT((code) < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_4bit));  \
+      ptable__ = &AAD_index_table_4bit[0];                                \
+      break;                                                              \
+    case 3:                                                               \
+      AAD_ASSERT((code) < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_3bit));  \
+      ptable__ = &AAD_index_table_3bit[0];                                \
+      break;                                                              \
+    case 2:                                                               \
+      AAD_ASSERT((code) < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_2bit));  \
+      ptable__ = &AAD_index_table_2bit[0];                                \
+      break;                                                              \
+    default: AAD_ASSERT(0);                                               \
+  }                                                                       \
+  /* テーブルインデックスの更新 */                                        \
+  (flt) = (int16_t)((flt) + (ptable__)[(code)]);                          \
+  /* インデックスの範囲内でクリップ */                                    \
+  (flt) = AAD_INNER_VAL((flt), 0,                                         \
+      AAD_TABLES_INDEX_TO_FLOAT(                                          \
+        (int16_t)AAD_NUM_TABLE_ELEMENTS(AAD_stepsize_table) - 1));        \
+  /* インデックス範囲チェック */                                          \
+  AAD_ASSERT(AAD_TABLES_FLOAT_TO_INDEX(flt)                               \
+      < (int16_t)AAD_NUM_TABLE_ELEMENTS(AAD_stepsize_table));             \
 }
 /* ステップサイズ取得 */
 #define AAD_TABLES_GET_STEPSIZE(flt)              (AAD_stepsize_table[AAD_TABLES_FLOAT_TO_INDEX(flt)])

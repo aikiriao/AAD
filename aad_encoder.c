@@ -388,12 +388,7 @@ static uint8_t AADEncodeProcessor_EncodeSample(
   qdiff = (sign) ? -qdiff : qdiff; /* 符号ビットの反映 */
 
   /* インデックス更新 */
-  switch (bits_per_sample) {
-    case 4: AAD_TABLES_UPDATE_INDEX(4, idx, code); break;
-    case 3: AAD_TABLES_UPDATE_INDEX(3, idx, code); break;
-    case 2: AAD_TABLES_UPDATE_INDEX(2, idx, code); break;
-    default: AAD_ASSERT(0);
-  }
+  AAD_TABLES_UPDATE_INDEX(idx, code, bits_per_sample);
 
   /* 計算結果の反映 */
   processor->stepsize_index = idx;
