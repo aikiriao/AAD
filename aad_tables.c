@@ -17,7 +17,7 @@
 #define AAD_TABLES_INDEX_TO_FLOAT(idx)            ((idx) << AAD_TABLES_FLOAT_DIGITS)
 /* 固定小数表記されたインデックスの更新 */
 #define AAD_TABLES_UPDATE_INDEX(flt, code, bits_per_sample) {             \
-  const int16_t *ptable__;                                                \
+  const int16_t *ptable__ = NULL;                                         \
   /* テーブルの選択 */                                                    \
   switch (bits_per_sample) {                                              \
     case 4:                                                               \
