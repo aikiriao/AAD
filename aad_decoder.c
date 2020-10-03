@@ -16,6 +16,7 @@ struct AADDecoder {
   struct AADHeaderInfo      header;
   struct AADDecodeProcessor processor[AAD_MAX_NUM_CHANNELS];
   uint8_t                   alloced_by_own;
+  uint8_t                   set_header;
   void                      *work;
 };
 
@@ -72,6 +73,9 @@ struct AADDecoder *AADDecoder_Create(void *work, int32_t work_size)
   
   /* 自前確保であることをマーク */
   decoder->alloced_by_own = tmp_alloced_by_own;
+
+  /* ヘッダは未セット状態 */
+  decoder->set_header = 0;
 
   /* バッファオーバーランチェック */
   AAD_ASSERT((int32_t)(work_ptr - (uint8_t *)work) <= work_size);
@@ -195,6 +199,31 @@ AADApiResult AADDecoder_DecodeHeader(
   return AAD_APIRESULT_OK;
 }
 
+/* ヘッダのデコードとデコーダへのセット */
+AADApiResult AADDecoder_DecodeAndSetHeader(
+    struct AADDecoder *decoder, const uint8_t *data, uint32_t data_size)
+{
+  AADApiResult ret;
+  AADHeaderInfo tmp_header;
+
+  /* 引数チェック */
+  if ((decoder == NULL) || (data == NULL)) {
+    return AAD_APIRESULT_INVALID_ARGUMENT;
+  }
+
+  /* ヘッダデコード */
+  if ((ret = AADDecoder_DecodeHeader(data, data_size, &tmp_header))
+      != AAD_APIRESULT_OK) {
+    return ret;
+  }
+
+  /* ヘッダセット */
+  decoder->header = tmp_header;
+  decoder->set_header = 1;
+
+  return AAD_APIRESULT_OK;
+}
+
 /* デコード処理ハンドルのリセット */
 static void AADDecodeProcessor_Reset(struct AADDecodeProcessor *processor)
 {
@@ -285,6 +314,11 @@ AADApiResult AADDecoder_DecodeBlock(
   if ((decoder == NULL) || (data == NULL)
       || (buffer == NULL) || (num_decode_samples == NULL)) {
     return AAD_APIRESULT_INVALID_ARGUMENT;
+  }
+
+  /* ヘッダがまだセットされていない */
+  if (decoder->set_header != 1) {
+    return AAD_APIRESULT_PARAMETER_NOT_SET;
   }
 
   /* ヘッダ取得 */
@@ -453,12 +487,11 @@ AADApiResult AADDecoder_DecodeWhole(
     return AAD_APIRESULT_INVALID_ARGUMENT;
   }
 
-  /* ヘッダデコード */
-  if ((ret = AADDecoder_DecodeHeader(data, data_size, &(decoder->header)))
+  /* ヘッダデコードとデコーダへのセット */
+  if ((ret = AADDecoder_DecodeAndSetHeader(decoder, data, data_size))
       != AAD_APIRESULT_OK) {
     return ret;
   }
-  header = &(decoder->header);
 
   /* バッファサイズチェック */
   if ((buffer_num_channels < header->num_channels)

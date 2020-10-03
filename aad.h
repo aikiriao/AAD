@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 /* コーデックバージョン */
-#define AAD_CODEC_VERSION           14
+#define AAD_CODEC_VERSION           15
 
 /* フォーマットバージョン */
 #define AAD_FORMAT_VERSION          4

@@ -24,6 +24,10 @@ struct AADDecoder *AADDecoder_Create(void *work, int32_t work_size);
 /* デコーダハンドル破棄 */
 void AADDecoder_Destroy(struct AADDecoder *decoder);
 
+/* ヘッダのデコードとデコーダへのセット */
+AADApiResult AADDecoder_DecodeAndSetHeader(
+    struct AADDecoder *decoder, const uint8_t *data, uint32_t data_size);
+
 /* 単一データブロックデコード */
 AADApiResult AADDecoder_DecodeBlock(
     struct AADDecoder *decoder,
