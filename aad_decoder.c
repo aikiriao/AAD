@@ -204,7 +204,7 @@ AADApiResult AADDecoder_DecodeAndSetHeader(
     struct AADDecoder *decoder, const uint8_t *data, uint32_t data_size)
 {
   AADApiResult ret;
-  AADHeaderInfo tmp_header;
+  struct AADHeaderInfo tmp_header;
 
   /* 引数チェック */
   if ((decoder == NULL) || (data == NULL)) {
@@ -492,6 +492,7 @@ AADApiResult AADDecoder_DecodeWhole(
       != AAD_APIRESULT_OK) {
     return ret;
   }
+  header = &(decoder->header);
 
   /* バッファサイズチェック */
   if ((buffer_num_channels < header->num_channels)
