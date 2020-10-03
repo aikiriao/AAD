@@ -257,13 +257,14 @@ static int execute_information(const char *adpcm_filename)
   }
 
   /* ヘッダ情報表示 */
-  printf("%-30s %d \n", "Number of Channels:",            header.num_channels);
-  printf("%-30s %d \n", "Number of Samples per Channel:", header.num_samples);
-  printf("%-30s %d \n", "Sampling Rate:",                 header.sampling_rate);
-  printf("%-30s %d \n", "Bits per Sample:",               header.bits_per_sample);
-  printf("%-30s %d \n", "Block size:",                    header.block_size);
-  printf("%-30s %d \n", "Number of Samples per Block:",   header.num_samples_per_block);
-  printf("%-30s %s \n", "Channel Processing:",            ch_process_string_table[header.ch_process_method]);
+  printf("%-30s %-9d   \n", "Number of Channels:",            header.num_channels);
+  printf("%-30s %-9d   \n", "Number of Samples per Channel:", header.num_samples);
+  printf("%-30s %-9d   \n", "Sampling Rate:",                 header.sampling_rate);
+  printf("%-30s %-9d   \n", "Bits per Sample:",               header.bits_per_sample);
+  printf("%-30s %-9d   \n", "Block size:",                    header.block_size);
+  printf("%-30s %-9d   \n", "Number of Samples per Block:",   header.num_samples_per_block);
+  printf("%-30s %-9s   \n", "Channel Processing:",            ch_process_string_table[header.ch_process_method]);
+  printf("%-30s %-8.1f \n", "Bits per Second(bps):",          (8.0f * header.block_size * header.sampling_rate) / header.num_samples_per_block);
 
   return 0;
 }
