@@ -6,12 +6,12 @@
 
 /* エンコードパラメータ */
 struct AADEncodeParameter {
-  uint16_t num_channels;          /* チャンネル数                               */
-  uint32_t sampling_rate;         /* サンプリングレート                         */
-  uint16_t bits_per_sample;       /* サンプルあたりビット数（今の所4で固定）    */
-  uint16_t max_block_size;        /* 最大ブロックサイズ[byte]                   */
-  AADChannelProcessMethod ch_process_method;  /* マルチチャンネル処理法         */
-  uint8_t  num_encode_trials;     /* エンコード繰り返し回数 */
+  uint16_t num_channels;                      /* チャンネル数               */
+  uint32_t sampling_rate;                     /* サンプリングレート         */
+  uint16_t bits_per_sample;                   /* サンプルあたりビット数     */
+  uint16_t max_block_size;                    /* 最大ブロックサイズ[byte]   */
+  AADChannelProcessMethod ch_process_method;  /* マルチチャンネル処理法     */
+  uint8_t  num_encode_trials;                 /* エンコード繰り返し回数     */
 };
 
 /* エンコーダハンドル */
