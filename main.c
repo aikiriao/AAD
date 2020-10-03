@@ -232,6 +232,7 @@ static int execute_information(const char *adpcm_filename)
   uint8_t               buffer[AAD_HEADER_SIZE];
   struct AADHeaderInfo  header;
   AADApiResult          ret;
+  static const char *ch_process_string_table[] = { "None", "MS-Conversion" };
 
   /* ファイルオープン */
   fp = fopen(adpcm_filename, "rb");
@@ -256,13 +257,13 @@ static int execute_information(const char *adpcm_filename)
   }
 
   /* ヘッダ情報表示 */
-  printf("Number of Channels: %d \n",             header.num_channels);
-  printf("Number of Samples per Channel: %d \n",  header.num_samples);
-  printf("Sampling Rate: %d \n",                  header.sampling_rate);
-  printf("Bits per Sample: %d \n",                header.bits_per_sample);
-  printf("Block size: %d \n",                     header.block_size);
-  printf("Number of Samples per Block: %d \n",    header.num_samples_per_block);
-  printf("Method of Channel Processing : %d \n",  header.ch_process_method);
+  printf("%-30s %d \n", "Number of Channels:",            header.num_channels);
+  printf("%-30s %d \n", "Number of Samples per Channel:", header.num_samples);
+  printf("%-30s %d \n", "Sampling Rate:",                 header.sampling_rate);
+  printf("%-30s %d \n", "Bits per Sample:",               header.bits_per_sample);
+  printf("%-30s %d \n", "Block size:",                    header.block_size);
+  printf("%-30s %d \n", "Number of Samples per Block:",   header.num_samples_per_block);
+  printf("%-30s %s \n", "Channel Processing:",            ch_process_string_table[header.ch_process_method]);
 
   return 0;
 }
