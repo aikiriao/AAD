@@ -376,7 +376,7 @@ AADApiResult AADDecoder_DecodeBlock(
   switch (header->bits_per_sample) {
     case 4:
       for (smpl = AAD_FILTER_ORDER; smpl < tmp_num_decode_samples; smpl += 2) {
-        const uint32_t copy_size = sizeof(int32_t) * AAD_MIN_VAL(2, tmp_num_decode_samples - smpl);
+        const size_t copy_size = sizeof(int32_t) * AAD_MIN_VAL(2, tmp_num_decode_samples - smpl);
         for (ch = 0; ch < header->num_channels; ch++) {
           uint8_t code;
           int32_t outbuf[2];
@@ -392,7 +392,7 @@ AADApiResult AADDecoder_DecodeBlock(
       break;
     case 3:
       for (smpl = AAD_FILTER_ORDER; smpl < tmp_num_decode_samples; smpl += 8) {
-        const uint32_t copy_size = sizeof(int32_t) * AAD_MIN_VAL(8, tmp_num_decode_samples - smpl);
+        const size_t copy_size = sizeof(int32_t) * AAD_MIN_VAL(8, tmp_num_decode_samples - smpl);
         for (ch = 0; ch < header->num_channels; ch++) {
           uint8_t code[3];
           int32_t outbuf[8];
@@ -418,7 +418,7 @@ AADApiResult AADDecoder_DecodeBlock(
       break;
     case 2:
       for (smpl = AAD_FILTER_ORDER; smpl < tmp_num_decode_samples; smpl += 4) {
-        const uint32_t copy_size = sizeof(int32_t) * AAD_MIN_VAL(4, tmp_num_decode_samples - smpl);
+        const size_t copy_size = sizeof(int32_t) * AAD_MIN_VAL(4, tmp_num_decode_samples - smpl);
         for (ch = 0; ch < header->num_channels; ch++) {
           uint8_t code;
           int32_t outbuf[4];
