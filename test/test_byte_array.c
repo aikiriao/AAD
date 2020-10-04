@@ -174,11 +174,11 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
 
   /* 3バイト読み/書き */
   {
-#define TEST_SIZE_UINT24 ((TEST_SIZE * 3) / sizeof(uint32_t))
+#define TEST_SIZE_FOR24  1021
+#define TEST_SIZE_UINT24 ((TEST_SIZE_FOR24 * 4) / (sizeof(uint32_t) * 3))
     uint8_t   *pos;
-    uint8_t   array[TEST_SIZE];
-    static uint32_t test[TEST_SIZE_UINT24];
-    static uint32_t answer[TEST_SIZE_UINT24];
+    uint8_t   array[TEST_SIZE_FOR24];
+    uint32_t  test[TEST_SIZE_UINT24], answer[TEST_SIZE_UINT24];
     uint32_t  i;
 
     /* 書き出し */
@@ -197,9 +197,8 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
     }
 
     /* 読み出した結果がリファレンスと一致するか？ */
-    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE_FOR24), 0);
 
-#if 0
     /* ビッグエンディアンでも */
 
     /* 書き出し */
@@ -218,15 +217,15 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
     }
 
     /* 読み出した結果がリファレンスと一致するか？ */
-    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
-#endif
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE_FOR24), 0);
 
 #undef TEST_SIZE_UINT24
+#undef TEST_SIZE_FOR24
   }
-#if 0
   /* 同じことをGet/Putでやる */
   {
-#define TEST_SIZE_UINT24 ((TEST_SIZE * 3) / sizeof(uint32_t))
+#define TEST_SIZE_FOR24  1021
+#define TEST_SIZE_UINT24 ((TEST_SIZE_FOR24 * 4) / (sizeof(uint32_t) * 3))
     uint8_t   *pos;
     uint8_t   array[TEST_SIZE];
     uint32_t  test[TEST_SIZE_UINT24], answer[TEST_SIZE_UINT24];
@@ -246,7 +245,7 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
     }
 
     /* 読み出した結果がリファレンスと一致するか？ */
-    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE_FOR24), 0);
 
     /* ビッグエンディアンでも */
 
@@ -264,11 +263,11 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
     }
 
     /* 読み出した結果がリファレンスと一致するか？ */
-    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE_FOR24), 0);
 
 #undef TEST_SIZE_UINT24
+#undef TEST_SIZE_FOR24
   }
-#endif
 
   /* 4バイト読み/書き */
   {
