@@ -177,7 +177,7 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
 #define TEST_SIZE_UINT24 ((TEST_SIZE * 3) / sizeof(uint32_t))
     uint8_t   *pos;
     uint8_t   array[TEST_SIZE];
-    uint32_t  test[TEST_SIZE_UINT24], answer[TEST_SIZE_UINT24];
+    static uint32_t  test[TEST_SIZE_UINT24], answer[TEST_SIZE_UINT24];
     uint32_t  i;
 
     /* 書き出し */
