@@ -14,6 +14,14 @@
    (((uint16_t)((p_array)[1])) << 0)                    \
   )
 
+/* 3バイト読み出し（ビッグエンディアン） */
+#define ByteArray_ReadUint24BE(p_array)                 \
+  (uint32_t)(                                           \
+   (((uint32_t)((p_array)[0])) << 16) |                 \
+   (((uint32_t)((p_array)[1])) <<  8) |                 \
+   (((uint32_t)((p_array)[2])) <<  0)                   \
+  )
+
 /* 4バイト読み出し（ビッグエンディアン） */
 #define ByteArray_ReadUint32BE(p_array)                 \
   (uint32_t)(                                           \
@@ -28,6 +36,14 @@
   (uint16_t)(                                           \
    (((uint16_t)((p_array)[0])) << 0) |                  \
    (((uint16_t)((p_array)[1])) << 8)                    \
+  )
+
+/* 3バイト読み出し（リトルエンディアン） */
+#define ByteArray_ReadUint24LE(p_array)                 \
+  (uint32_t)(                                           \
+   (((uint32_t)((p_array)[0])) <<  0) |                 \
+   (((uint32_t)((p_array)[1])) <<  8) |                 \
+   (((uint32_t)((p_array)[2])) << 16)                   \
   )
 
 /* 4バイト読み出し（リトルエンディアン） */
@@ -51,6 +67,12 @@
   (p_array) += 2;                                       \
 }
 
+/* 3バイト取得（ビッグエンディアン） */
+#define ByteArray_GetUint24BE(p_array, p_u32val) {      \
+  (*(p_u32val)) = ByteArray_ReadUint24BE(p_array);      \
+  (p_array) += 3;                                       \
+}
+
 /* 4バイト取得（ビッグエンディアン） */
 #define ByteArray_GetUint32BE(p_array, p_u32val) {      \
   (*(p_u32val)) = ByteArray_ReadUint32BE(p_array);      \
@@ -61,6 +83,12 @@
 #define ByteArray_GetUint16LE(p_array, p_u16val) {      \
   (*(p_u16val)) = ByteArray_ReadUint16LE(p_array);      \
   (p_array) += 2;                                       \
+}
+
+/* 3バイト取得（リトルエンディアン） */
+#define ByteArray_GetUint24LE(p_array, p_u32val) {      \
+  (*(p_u32val)) = ByteArray_ReadUint24LE(p_array);      \
+  (p_array) += 3;                                       \
 }
 
 /* 4バイト取得（リトルエンディアン） */
@@ -80,6 +108,13 @@
   ((p_array)[1]) = (uint8_t)(((u16val) >> 0) & 0xFF);   \
 }
 
+/* 3バイト書き出し（ビッグエンディアン） */
+#define ByteArray_WriteUint24BE(p_array, u32val) {      \
+  ((p_array)[0]) = (uint8_t)(((u32val) >> 16) & 0xFF);  \
+  ((p_array)[1]) = (uint8_t)(((u32val) >>  8) & 0xFF);  \
+  ((p_array)[2]) = (uint8_t)(((u32val) >>  0) & 0xFF);  \
+}
+
 /* 4バイト書き出し（ビッグエンディアン） */
 #define ByteArray_WriteUint32BE(p_array, u32val) {      \
   ((p_array)[0]) = (uint8_t)(((u32val) >> 24) & 0xFF);  \
@@ -92,6 +127,13 @@
 #define ByteArray_WriteUint16LE(p_array, u16val) {      \
   ((p_array)[0]) = (uint8_t)(((u16val) >> 0) & 0xFF);   \
   ((p_array)[1]) = (uint8_t)(((u16val) >> 8) & 0xFF);   \
+}
+
+/* 3バイト書き出し（リトルエンディアン） */
+#define ByteArray_WriteUint24LE(p_array, u32val) {      \
+  ((p_array)[0]) = (uint8_t)(((u32val) >>  0) & 0xFF);  \
+  ((p_array)[1]) = (uint8_t)(((u32val) >>  8) & 0xFF);  \
+  ((p_array)[2]) = (uint8_t)(((u32val) >> 16) & 0xFF);  \
 }
 
 /* 4バイト書き出し（リトルエンディアン） */
@@ -114,6 +156,12 @@
   (p_array) += 2;                                       \
 }
 
+/* 3バイト出力（ビッグエンディアン） */
+#define ByteArray_PutUint24BE(p_array, u32val) {        \
+  ByteArray_WriteUint24BE(p_array, u32val);             \
+  (p_array) += 3;                                       \
+}
+
 /* 4バイト出力（ビッグエンディアン） */
 #define ByteArray_PutUint32BE(p_array, u32val) {        \
   ByteArray_WriteUint32BE(p_array, u32val);             \
@@ -124,6 +172,12 @@
 #define ByteArray_PutUint16LE(p_array, u16val) {        \
   ByteArray_WriteUint16LE(p_array, u16val);             \
   (p_array) += 2;                                       \
+}
+
+/* 3バイト出力（リトルエンディアン） */
+#define ByteArray_PutUint24LE(p_array, u32val) {        \
+  ByteArray_WriteUint24LE(p_array, u32val);             \
+  (p_array) += 3;                                       \
 }
 
 /* 4バイト出力（リトルエンディアン） */

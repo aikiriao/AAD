@@ -172,6 +172,99 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
 #undef TEST_SIZE_UINT16
   }
 
+  /* 3バイト読み/書き */
+  {
+#define TEST_SIZE_UINT24 ((TEST_SIZE * 3) / sizeof(uint32_t))
+    uint8_t   *pos;
+    uint8_t   array[TEST_SIZE];
+    uint32_t  test[TEST_SIZE_UINT24], answer[TEST_SIZE_UINT24];
+    uint32_t  i;
+
+    /* 書き出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT24; i++) {
+      answer[i] = (uint32_t)i;
+      ByteArray_WriteUint24LE(pos, (uint32_t)i);
+      pos += 3;
+    }
+
+    /* 読み出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT24; i++) {
+      test[i] = ByteArray_ReadUint24LE(pos);
+      pos += 3;
+    }
+
+    /* 読み出した結果がリファレンスと一致するか？ */
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
+    /* ビッグエンディアンでも */
+
+    /* 書き出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT24; i++) {
+      answer[i] = (uint32_t)i;
+      ByteArray_WriteUint24BE(pos, (uint32_t)i);
+      pos += 3;
+    }
+
+    /* 読み出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT24; i++) {
+      test[i] = ByteArray_ReadUint24BE(pos);
+      pos += 3;
+    }
+
+    /* 読み出した結果がリファレンスと一致するか？ */
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
+#undef TEST_SIZE_UINT24
+  }
+  /* 同じことをGet/Putでやる */
+  {
+#define TEST_SIZE_UINT24 ((TEST_SIZE * 3) / sizeof(uint32_t))
+    uint8_t   *pos;
+    uint8_t   array[TEST_SIZE];
+    uint32_t  test[TEST_SIZE_UINT24], answer[TEST_SIZE_UINT24];
+    uint32_t  i;
+
+    /* 書き出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT24; i++) {
+      answer[i] = (uint32_t)i;
+      ByteArray_PutUint24LE(pos, (uint32_t)i);
+    }
+
+    /* 読み出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT24; i++) {
+      ByteArray_GetUint24LE(pos, &test[i]);
+    }
+
+    /* 読み出した結果がリファレンスと一致するか？ */
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
+    /* ビッグエンディアンでも */
+
+    /* 書き出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT24; i++) {
+      answer[i] = (uint32_t)i;
+      ByteArray_PutUint24BE(pos, (uint32_t)i);
+    }
+
+    /* 読み出し */
+    pos = array;
+    for (i = 0; i < TEST_SIZE_UINT24; i++) {
+      ByteArray_GetUint24BE(pos, &test[i]);
+    }
+
+    /* 読み出した結果がリファレンスと一致するか？ */
+    Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+
+#undef TEST_SIZE_UINT24
+  }
+
   /* 4バイト読み/書き */
   {
 #define TEST_SIZE_UINT32 (TEST_SIZE / sizeof(uint32_t))

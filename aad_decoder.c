@@ -394,24 +394,22 @@ AADApiResult AADDecoder_DecodeBlock(
       for (smpl = AAD_FILTER_ORDER; smpl < tmp_num_decode_samples; smpl += 8) {
         const size_t copy_size = sizeof(int32_t) * AAD_MIN_VAL(8, tmp_num_decode_samples - smpl);
         for (ch = 0; ch < header->num_channels; ch++) {
-          uint8_t code[3];
+          uint32_t code24;
           int32_t outbuf[8];
           struct AADDecodeProcessor *processor = &(decoder->processor[ch]);
           AAD_ASSERT((uint32_t)(read_pos - data) < data_size);
           AAD_ASSERT((uint32_t)(read_pos - data) < header->block_size);
-          ByteArray_GetUint8(read_pos, &code[0]);
-          ByteArray_GetUint8(read_pos, &code[1]);
-          ByteArray_GetUint8(read_pos, &code[2]);
+          ByteArray_GetUint24BE(read_pos, &code24);
           AAD_ASSERT((uint32_t)(read_pos - data) <= data_size);
           AAD_ASSERT((uint32_t)(read_pos - data) <= header->block_size);
-          outbuf[0] = AADDecodeProcessor_DecodeSample(processor, (code[0] >> 5) & 0x7, 3); 
-          outbuf[1] = AADDecodeProcessor_DecodeSample(processor, (code[0] >> 2) & 0x7, 3); 
-          outbuf[2] = AADDecodeProcessor_DecodeSample(processor, (uint8_t)(((code[0] & 0x3) << 1) | ((code[1] >> 7) & 0x1)), 3); 
-          outbuf[3] = AADDecodeProcessor_DecodeSample(processor, (code[1] >> 4) & 0x7, 3); 
-          outbuf[4] = AADDecodeProcessor_DecodeSample(processor, (code[1] >> 1) & 0x7, 3); 
-          outbuf[5] = AADDecodeProcessor_DecodeSample(processor, (uint8_t)(((code[1] & 0x1) << 2) | ((code[2] >> 6) & 0x3)), 3); 
-          outbuf[6] = AADDecodeProcessor_DecodeSample(processor, (code[2] >> 3) & 0x7, 3); 
-          outbuf[7] = AADDecodeProcessor_DecodeSample(processor, (code[2] >> 0) & 0x7, 3); 
+          outbuf[0] = AADDecodeProcessor_DecodeSample(processor, (code24 >> 21) & 0x7, 3); 
+          outbuf[1] = AADDecodeProcessor_DecodeSample(processor, (code24 >> 18) & 0x7, 3); 
+          outbuf[2] = AADDecodeProcessor_DecodeSample(processor, (code24 >> 15) & 0x7, 3); 
+          outbuf[3] = AADDecodeProcessor_DecodeSample(processor, (code24 >> 12) & 0x7, 3); 
+          outbuf[4] = AADDecodeProcessor_DecodeSample(processor, (code24 >>  9) & 0x7, 3); 
+          outbuf[5] = AADDecodeProcessor_DecodeSample(processor, (code24 >>  6) & 0x7, 3); 
+          outbuf[6] = AADDecodeProcessor_DecodeSample(processor, (code24 >>  3) & 0x7, 3); 
+          outbuf[7] = AADDecodeProcessor_DecodeSample(processor, (code24 >>  0) & 0x7, 3); 
           memcpy(&buffer[ch][smpl], outbuf, copy_size);
         }
       }
