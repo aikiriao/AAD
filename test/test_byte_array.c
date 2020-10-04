@@ -172,7 +172,6 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
 #undef TEST_SIZE_UINT16
   }
 
-#if 0
   /* 3バイト読み/書き */
   {
 #define TEST_SIZE_UINT24 ((TEST_SIZE * 3) / sizeof(uint32_t))
@@ -221,6 +220,7 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
 
 #undef TEST_SIZE_UINT24
   }
+#if 0
   /* 同じことをGet/Putでやる */
   {
 #define TEST_SIZE_UINT24 ((TEST_SIZE * 3) / sizeof(uint32_t))
