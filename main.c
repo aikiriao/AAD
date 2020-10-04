@@ -264,7 +264,7 @@ static int execute_information(const char *adpcm_filename)
   printf("%-30s %-9d   \n", "Block size:",                    header.block_size);
   printf("%-30s %-9d   \n", "Number of Samples per Block:",   header.num_samples_per_block);
   printf("%-30s %-9s   \n", "Channel Processing:",            ch_process_string_table[header.ch_process_method]);
-  printf("%-30s %-8.1f \n", "Bits per Second(bps):",          (8.0f * header.block_size * header.sampling_rate) / header.num_samples_per_block);
+  printf("%-30s %-8.1f \n", "Bits per Second(bps):",          (8.0f * (double)header.block_size * header.sampling_rate) / header.num_samples_per_block);
 
   return 0;
 }
