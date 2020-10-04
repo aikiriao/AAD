@@ -198,6 +198,7 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
     /* 読み出した結果がリファレンスと一致するか？ */
     Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
 
+#if 0
     /* ビッグエンディアンでも */
 
     /* 書き出し */
@@ -217,6 +218,7 @@ static void ByteArrayTest_ReadWriteTest(void *obj)
 
     /* 読み出した結果がリファレンスと一致するか？ */
     Test_AssertEqual(memcmp(test, answer, sizeof(uint8_t) * TEST_SIZE), 0);
+#endif
 
 #undef TEST_SIZE_UINT24
   }
