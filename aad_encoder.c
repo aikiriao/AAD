@@ -680,7 +680,7 @@ static AADApiResult AADEncoder_EncodeBlock(
     case 3:
       for (smpl = AAD_FILTER_ORDER; smpl < num_samples; smpl += 8) {
         uint8_t code[8];
-        uint8_t outbuf[3];
+        uint32_t outbuf;
         for (ch = 0; ch < header->num_channels; ch++) {
           AAD_ASSERT((uint32_t)(data_pos - data) < data_size);
           AAD_ASSERT((uint32_t)(data_pos - data) < header->block_size);
@@ -693,14 +693,11 @@ static AADApiResult AADEncoder_EncodeBlock(
           code[6] = AADEncodeProcessor_EncodeSample(&(encoder->processor[ch]), buffer[ch][smpl + 6], 3);
           code[7] = AADEncodeProcessor_EncodeSample(&(encoder->processor[ch]), buffer[ch][smpl + 7], 3);
           AAD_ASSERT((code[0] <= 0x7) && (code[1] <= 0x7) && (code[2] <= 0x7) && (code[3] <= 0x7)
-              && (code[4] <= 0x7) && (code[5] <= 0x7) && (code[6] <= 0x7) && (code[7] <= 0x7));
+                  && (code[4] <= 0x7) && (code[5] <= 0x7) && (code[6] <= 0x7) && (code[7] <= 0x7));
           /* 3byteに詰める */
-          outbuf[0] = (uint8_t)((code[0] << 5) | (code[1] << 2) | ((code[2] & 0x6) >> 1));
-          outbuf[1] = (uint8_t)(((code[2] & 0x1) << 7) | (code[3] << 4) | (code[4] << 1) | ((code[5] & 0x4) >> 2));
-          outbuf[2] = (uint8_t)(((code[5] & 0x3) << 6) | (code[6] << 3) | (code[7]));
-          ByteArray_PutUint8(data_pos, outbuf[0]);
-          ByteArray_PutUint8(data_pos, outbuf[1]);
-          ByteArray_PutUint8(data_pos, outbuf[2]);
+          outbuf = (uint32_t)((code[0] << 21) | (code[1] << 18) | (code[2] << 15) | (code[3] << 12)
+                            | (code[4] <<  9) | (code[5] <<  6) | (code[6] <<  3) | (code[7] <<  0));
+          ByteArray_PutUint24BE(data_pos, outbuf);
           AAD_ASSERT((uint32_t)(data_pos - data) <= data_size);
           AAD_ASSERT((uint32_t)(data_pos - data) <= header->block_size);
         }
