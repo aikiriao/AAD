@@ -229,6 +229,7 @@ int32_t AADEncoder_CalculateWorkSize(uint16_t max_block_size)
   uint16_t block_size;
 
   /* 最大ブロックサイズから最大のブロックあたりのサンプル数を計算 */
+  /* note:最もサンプル数が入るケースとして、ビット数は最小かつチャンネル数は1とする */
   if (AADEncoder_CalculateBlockSize(
         max_block_size, 1, AAD_MIN_BITS_PER_SAMPLE,
         &block_size, &num_samples_per_block) != AAD_APIRESULT_OK) {
@@ -255,6 +256,7 @@ struct AADEncoder *AADEncoder_Create(uint16_t max_block_size, void *work, int32_
   uint32_t num_samples_per_block;
 
   /* ブロックあたりサンプル数の計算 */
+  /* note:最もサンプル数が入るケースとして、ビット数は最小かつチャンネル数は1とする */
   if (AADEncoder_CalculateBlockSize(
         max_block_size, 1, AAD_MIN_BITS_PER_SAMPLE,
         &block_size, &num_samples_per_block) != AAD_APIRESULT_OK) {
@@ -870,12 +872,13 @@ AADApiResult AADEncoder_EncodeWhole(
       memcpy(encoder->processor, &best_processor, sizeof(struct AADEncodeProcessor) * header->num_channels);
     }
 
-    /* 実際のエンコード処理 */
+    /* ブロックエンコード */
     if ((ret = AADEncoder_EncodeBlock(encoder,
             input_ptr, num_encode_samples,
             data_pos, data_size - write_offset, &write_size)) != AAD_APIRESULT_OK) {
       return ret;
     }
+
     /* 進捗更新 */
     data_pos      += write_size;
     write_offset  += write_size;
