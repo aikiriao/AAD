@@ -257,6 +257,8 @@ static int execute_information(const char *adpcm_filename)
   }
 
   /* ヘッダ情報表示 */
+  printf("%-30s %-9d   \n", "Format Version:",                header.format_version);
+  printf("%-30s %-9d   \n", "Codec Version:",                 header.codec_version);
   printf("%-30s %-9d   \n", "Number of Channels:",            header.num_channels);
   printf("%-30s %-9d   \n", "Number of Samples per Channel:", header.num_samples);
   printf("%-30s %-9d   \n", "Sampling Rate:",                 header.sampling_rate);
@@ -564,8 +566,10 @@ int main(int argc, char **argv)
   }
 
   /* エンコードパラメータの取得 */
-  if ((CommandLineParser_GetOptionAcquired(command_line_spec, "decode") == COMMAND_LINE_PARSER_FALSE)
-      && (CommandLineParser_GetOptionAcquired(command_line_spec, "information") == COMMAND_LINE_PARSER_FALSE)) {
+  if ((CommandLineParser_GetOptionAcquired(command_line_spec, "encode") == COMMAND_LINE_PARSER_TRUE)
+      || (CommandLineParser_GetOptionAcquired(command_line_spec, "reconstruct") == COMMAND_LINE_PARSER_TRUE)
+      || (CommandLineParser_GetOptionAcquired(command_line_spec, "gap") == COMMAND_LINE_PARSER_TRUE)
+      || (CommandLineParser_GetOptionAcquired(command_line_spec, "calculate") == COMMAND_LINE_PARSER_TRUE)) {
     encode_paramemter.bits_per_sample
       = (uint8_t)strtol(CommandLineParser_GetArgumentString(command_line_spec, "bits-per-sample"), NULL, 10);
     encode_paramemter.max_block_size

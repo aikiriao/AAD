@@ -195,9 +195,11 @@ AADApiResult AADEncoder_EncodeHeader(
   ByteArray_PutUint8(data_pos, 'A');
   ByteArray_PutUint8(data_pos, 'D');
   ByteArray_PutUint8(data_pos, '\0');
-  /* フォーマットバージョン */
+  /* フォーマットバージョン
+   * 補足）ヘッダの設定値は無視してマクロ値を書き込む */
   ByteArray_PutUint32BE(data_pos, AAD_FORMAT_VERSION);
-  /* コーデックバージョン */
+  /* コーデックバージョン
+   * 補足）ヘッダの設定値は無視してマクロ値を書き込む */
   ByteArray_PutUint32BE(data_pos, AAD_CODEC_VERSION);
   /* チャンネル数 */
   ByteArray_PutUint16BE(data_pos, header_info->num_channels);

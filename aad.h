@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 /* コーデックバージョン */
-#define AAD_CODEC_VERSION           15
+#define AAD_CODEC_VERSION           16
 
 /* フォーマットバージョン */
 #define AAD_FORMAT_VERSION          4
@@ -41,6 +41,8 @@ typedef enum AADChannelProcessMethodTag {
 
 /* ヘッダ情報 */
 struct AADHeaderInfo {
+  uint32_t format_version;                    /* フォーマットバージョン         */
+  uint32_t codec_version;                     /* コーデックバージョン           */
   uint16_t num_channels;                      /* チャンネル数                   */
   uint32_t num_samples;                       /* 1チャンネルあたり総サンプル数  */
   uint32_t sampling_rate;                     /* サンプリングレート             */

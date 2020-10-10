@@ -30,25 +30,26 @@ static int AADDecoderTest_Finalize(void *obj)
 }
 
 /* ヘッダデコードテスト */
-static void AADDecoderTest_HeaderDecodeTest(void *obj)
+static void AADDecoderTest_DecodeHeaderTest(void *obj)
 {
   TEST_UNUSED_PARAMETER(obj);
 
   /* 有効なヘッダをセット */
-#define AAD_SetValidHeader(p_header) {                          \
-  struct AADHeaderInfo *header__p = p_header;                   \
-  header__p->num_channels           = 1;                        \
-  header__p->sampling_rate          = 44100;                    \
-  header__p->block_size             = 32;                       \
-  header__p->bits_per_sample        = AAD_MAX_BITS_PER_SAMPLE;  \
-  header__p->num_samples            = 1024;                     \
-  header__p->num_samples_per_block  = 32;                       \
+#define AAD_SetValidHeader(p_header) {                            \
+  struct AADHeaderInfo *header__p = p_header;                     \
+  header__p->num_channels           = 1;                          \
+  header__p->sampling_rate          = 44100;                      \
+  header__p->block_size             = 128;                        \
+  header__p->bits_per_sample        = AAD_MAX_BITS_PER_SAMPLE;    \
+  header__p->num_samples            = 1024;                       \
+  header__p->num_samples_per_block  = 32;                         \
+  header__p->ch_process_method      = AAD_CH_PROCESS_METHOD_NONE; \
 }
 
   /* 成功例 */
   {
     uint8_t data[AAD_HEADER_SIZE] = { 0, };
-    struct AADHeaderInfo header = { 0, }, tmp_header = { 0, };
+    struct AADHeaderInfo header, tmp_header;
 
     AAD_SetValidHeader(&header);
 
@@ -57,12 +58,15 @@ static void AADDecoderTest_HeaderDecodeTest(void *obj)
     Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &tmp_header), AAD_APIRESULT_OK);
 
     /* デコードしたヘッダの一致確認 */
-    Test_AssertEqual(header.num_channels,           tmp_header.num_channels);
-    Test_AssertEqual(header.sampling_rate,          tmp_header.sampling_rate);
-    Test_AssertEqual(header.block_size,             tmp_header.block_size);
-    Test_AssertEqual(header.bits_per_sample,        tmp_header.bits_per_sample);
-    Test_AssertEqual(header.num_samples,            tmp_header.num_samples);
-    Test_AssertEqual(header.num_samples_per_block,  tmp_header.num_samples_per_block);
+    Test_AssertEqual(tmp_header.format_version,         AAD_FORMAT_VERSION);
+    Test_AssertEqual(tmp_header.codec_version,          AAD_CODEC_VERSION);
+    Test_AssertEqual(tmp_header.num_channels,           header.num_channels);
+    Test_AssertEqual(tmp_header.sampling_rate,          header.sampling_rate);
+    Test_AssertEqual(tmp_header.block_size,             header.block_size);
+    Test_AssertEqual(tmp_header.bits_per_sample,        header.bits_per_sample);
+    Test_AssertEqual(tmp_header.num_samples,            header.num_samples);
+    Test_AssertEqual(tmp_header.num_samples_per_block,  header.num_samples_per_block);
+    Test_AssertEqual(tmp_header.ch_process_method,      header.ch_process_method);
   }
 
   /* ヘッダデコード失敗ケース */
@@ -70,81 +74,116 @@ static void AADDecoderTest_HeaderDecodeTest(void *obj)
     struct AADHeaderInfo header, getheader;
     uint8_t valid_data[AAD_HEADER_SIZE] = { 0, };
     uint8_t data[AAD_HEADER_SIZE];
-
+    
     /* 有効な内容を作っておく */
     AAD_SetValidHeader(&header);
-    AADEncoder_EncodeHeader(&header, valid_data, sizeof(valid_data));
+    Test_AssertEqual(AADEncoder_EncodeHeader(&header, valid_data, sizeof(valid_data)), AAD_APIRESULT_OK);
+    /* 有効であることを確認 */
+    Test_AssertEqual(AADDecoder_DecodeHeader(valid_data, sizeof(valid_data), &getheader), AAD_APIRESULT_OK);
 
     /* シグネチャが不正 */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint8(&data[0], 'a');
     Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    
+    /* 以降のテストケースでは、ヘッダは取得できるが、内部のチェック関数で失敗する */
 
     /* 異常なフォーマットバージョン */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint32BE(&data[4], 0);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint32BE(&data[4], AAD_FORMAT_VERSION + 1);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
 
     /* 異常なコーデックバージョン */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint32BE(&data[8], 0);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint32BE(&data[8], AAD_CODEC_VERSION + 1);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
 
     /* 異常なチャンネル数 */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint16BE(&data[12], 0);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint16BE(&data[12], AAD_MAX_NUM_CHANNELS + 1);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
 
     /* 異常なサンプル数 */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint32BE(&data[14], 0);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
 
     /* 異常なサンプリングレート */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint32BE(&data[18], 0);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
 
     /* 異常なサンプルあたりビット数 */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint16BE(&data[22], 0);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint16BE(&data[22], AAD_MAX_BITS_PER_SAMPLE + 1);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
 
     /* 異常なブロックサイズ */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint16BE(&data[24], 0);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint16BE(&data[24], AAD_BLOCK_HEADER_SIZE(header.num_channels) - 1);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
 
     /* 異常なブロックあたりサンプル数 */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint32BE(&data[26], 0);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
 
     /* 異常なチャンネル処理法 */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint8(&data[30], AAD_CH_PROCESS_METHOD_INVALID);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
 
     /* チャンネル処理法とチャンネル数指定の組み合わせがおかしい */
     memcpy(data, valid_data, sizeof(valid_data));
+    memset(&getheader, 0xCD, sizeof(getheader));
     ByteArray_WriteUint16BE(&data[12], 1);
     ByteArray_WriteUint8(&data[30], AAD_CH_PROCESS_METHOD_MS);
-    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_INVALID_FORMAT);
+    Test_AssertEqual(AADDecoder_DecodeHeader(data, sizeof(data), &getheader), AAD_APIRESULT_OK);
+    Test_AssertEqual(AADDecoder_CheckHeaderFormat(&getheader), AAD_ERROR_INVALID_FORMAT);
   }
 }
 
@@ -305,7 +344,7 @@ void AADDecoderTest_Setup(void)
     = Test_AddTestSuite("AAD Decoder Test Suite",
         NULL, AADDecoderTest_Initialize, AADDecoderTest_Finalize);
 
-  Test_AddTest(suite, AADDecoderTest_HeaderDecodeTest);
+  Test_AddTest(suite, AADDecoderTest_DecodeHeaderTest);
   Test_AddTest(suite, AADDecoderTest_CreateDestroyTest);
   Test_AddTest(suite, AADDecoderTest_DecodeTest);
 }

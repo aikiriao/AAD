@@ -24,6 +24,9 @@ struct AADDecoder {
 /* デコード処理ハンドルのリセット */
 static void AADDecodeProcessor_Reset(struct AADDecodeProcessor *processor);
 
+/* ヘッダのフォーマットチェック */
+static AADError AADDecoder_CheckHeaderFormat(const struct AADHeaderInfo *header);
+
 /* 1サンプルデコード */
 static int32_t AADDecodeProcessor_DecodeSample(
     struct AADDecodeProcessor *processor, uint8_t code, uint8_t bits_per_sample);
@@ -131,66 +134,35 @@ AADApiResult AADDecoder_DecodeHeader(
     }
   }
 
+  /* シグネチャ検査に通ったら、エラーを起こさずに読み切る */
+
   /* フォーマットバージョン */
   ByteArray_GetUint32BE(data_pos, &u32buf);
-  if (u32buf != AAD_FORMAT_VERSION) {
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
-
+  tmp_header_info.format_version = u32buf;
   /* コーデックバージョン */
   ByteArray_GetUint32BE(data_pos, &u32buf);
-  if (u32buf != AAD_CODEC_VERSION) {
-    /* バージョン不一致の場合は無条件で失敗 */
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
-
+  tmp_header_info.codec_version = u32buf;
   /* チャンネル数 */
   ByteArray_GetUint16BE(data_pos, &u16buf);
-  if ((u16buf == 0) || (u16buf > AAD_MAX_NUM_CHANNELS)) {
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
   tmp_header_info.num_channels = u16buf;
   /* サンプル数 */
   ByteArray_GetUint32BE(data_pos, &u32buf);
-  if (u32buf == 0) {
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
   tmp_header_info.num_samples = u32buf;
   /* サンプリングレート */
   ByteArray_GetUint32BE(data_pos, &u32buf);
-  if (u32buf == 0) {
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
   tmp_header_info.sampling_rate = u32buf;
   /* サンプルあたりビット数 */
   ByteArray_GetUint16BE(data_pos, &u16buf);
-  if ((u16buf < AAD_MIN_BITS_PER_SAMPLE) || (u16buf > AAD_MAX_BITS_PER_SAMPLE)) {
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
   tmp_header_info.bits_per_sample = u16buf;
   /* ブロックサイズ */
   ByteArray_GetUint16BE(data_pos, &u16buf);
-  if (u16buf <= AAD_BLOCK_HEADER_SIZE(tmp_header_info.num_channels)) {
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
   tmp_header_info.block_size = u16buf;
   /* ブロックあたりサンプル数 */
   ByteArray_GetUint32BE(data_pos, &u32buf);
-  if (u32buf == 0) {
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
   tmp_header_info.num_samples_per_block = u32buf;
   /* マルチチャンネル処理法 */
   ByteArray_GetUint8(data_pos, &u8buf);
-  if (u8buf >= AAD_CH_PROCESS_METHOD_INVALID) {
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
   tmp_header_info.ch_process_method = u8buf;
-  /* モノラルではMS処理はできない */
-  if ((tmp_header_info.ch_process_method == AAD_CH_PROCESS_METHOD_MS) 
-      && (tmp_header_info.num_channels == 1)) {
-    return AAD_APIRESULT_INVALID_FORMAT;
-  }
 
   /* ヘッダサイズチェック */
   AAD_ASSERT((data_pos - data) == AAD_HEADER_SIZE);
@@ -198,6 +170,61 @@ AADApiResult AADDecoder_DecodeHeader(
   /* 成功終了 */
   (*header_info) = tmp_header_info;
   return AAD_APIRESULT_OK;
+}
+
+/* ヘッダのフォーマットチェック */
+static AADError AADDecoder_CheckHeaderFormat(const struct AADHeaderInfo *header)
+{
+  /* 内部モジュールなのでNULLが渡されたら落とす */
+  AAD_ASSERT(header != NULL);
+
+  /* フォーマットバージョン */
+  /* memo:今のところは無条件でエラー */
+  if (header->format_version != AAD_FORMAT_VERSION) {
+    return AAD_ERROR_INVALID_FORMAT;
+  }
+  /* コーデックバージョン */
+  /* memo:今のところは無条件でエラー */
+  if (header->codec_version != AAD_CODEC_VERSION) {
+    return AAD_ERROR_INVALID_FORMAT;
+  }
+  /* チャンネル数 */
+  if ((header->num_channels == 0)
+      || (header->num_channels > AAD_MAX_NUM_CHANNELS)) {
+    return AAD_ERROR_INVALID_FORMAT;
+  }
+  /* サンプル数 */
+  if (header->num_samples == 0) {
+    return AAD_ERROR_INVALID_FORMAT;
+  }
+  /* サンプリングレート */
+  if (header->sampling_rate == 0) {
+    return AAD_ERROR_INVALID_FORMAT;
+  }
+  /* サンプルあたりビット数 */
+  if ((header->bits_per_sample < AAD_MIN_BITS_PER_SAMPLE)
+      || (header->bits_per_sample > AAD_MAX_BITS_PER_SAMPLE)) {
+    return AAD_ERROR_INVALID_FORMAT;
+  }
+  /* ブロックサイズ */
+  if (header->block_size <= AAD_BLOCK_HEADER_SIZE(header->num_channels)) {
+    return AAD_ERROR_INVALID_FORMAT;
+  }
+  /* ブロックあたりサンプル数 */
+  if (header->num_samples_per_block == 0) {
+    return AAD_ERROR_INVALID_FORMAT;
+  }
+  /* マルチチャンネル処理法 */
+  if (header->ch_process_method >= AAD_CH_PROCESS_METHOD_INVALID) {
+    return AAD_ERROR_INVALID_FORMAT;
+  }
+  /* モノラルではMS処理はできない */
+  if ((header->ch_process_method == AAD_CH_PROCESS_METHOD_MS) 
+      && (header->num_channels == 1)) {
+    return AAD_ERROR_INVALID_FORMAT;
+  }
+
+  return AAD_ERROR_OK;
 }
 
 /* ヘッダのデコードとデコーダへのセット */
@@ -216,6 +243,11 @@ AADApiResult AADDecoder_DecodeAndSetHeader(
   if ((ret = AADDecoder_DecodeHeader(data, data_size, &tmp_header))
       != AAD_APIRESULT_OK) {
     return ret;
+  }
+
+  /* ヘッダの有効性確認 */
+  if (AADDecoder_CheckHeaderFormat(&tmp_header) != AAD_ERROR_OK) {
+    return AAD_APIRESULT_INVALID_FORMAT;
   }
 
   /* ヘッダセット */
