@@ -437,9 +437,12 @@ AADApiResult AADDecoder_DecodeBlock(
   }
 
   /* MS -> LR */
-  if ((header->num_channels >= 2)
-      && (header->ch_process_method == AAD_CH_PROCESS_METHOD_MS)) {
+  if (header->ch_process_method == AAD_CH_PROCESS_METHOD_MS) {
     int32_t mid, side;
+    /* チャンネル数チェック */
+    if (header->num_channels < 2) {
+      return AAD_APIRESULT_INVALID_FORMAT;
+    }
     for (smpl = 0; smpl < tmp_num_decode_samples; smpl++) {
       mid   = buffer[0][smpl];
       side  = buffer[1][smpl];

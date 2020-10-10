@@ -600,8 +600,11 @@ static AADApiResult AADEncoder_EncodeBlock(
   }
 
   /* LR -> MS */
-  if ((header->num_channels >= 2)
-      && (header->ch_process_method == AAD_CH_PROCESS_METHOD_MS)) {
+  if (header->ch_process_method == AAD_CH_PROCESS_METHOD_MS) {
+    /* チャンネル数チェック */
+    if (header->num_channels < 2) {
+      return AAD_APIRESULT_INVALID_FORMAT;
+    }
     AADEncoder_LRtoMSInterleave(buffer, num_samples);
   }
 
