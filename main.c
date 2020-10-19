@@ -385,6 +385,9 @@ static int execute_reconstruction(
   /* ファイルに書き出し */
   WAV_WriteToFile(reconstruct_file, wavfile);
 
+  /* ハンドル破棄 */
+  WAV_Destroy(wavfile);
+
   return 0;
 }
 
@@ -427,6 +430,9 @@ static int execute_gap(
 
   /* ファイルに書き出し */
   WAV_WriteToFile(gap_file, wavfile);
+
+  /* ハンドル破棄 */
+  WAV_Destroy(wavfile);
 
   return 0;
 }
@@ -489,6 +495,9 @@ static int execute_calculation(const char *wav_file, const struct AADEncodeParam
       sqrt(rms_error / (num_channels * num_samples)), 
       abs_error / (num_channels * num_samples),
       max_error);
+
+  /* ハンドル破棄 */
+  WAV_Destroy(wavfile);
 
   return 0;
 }
