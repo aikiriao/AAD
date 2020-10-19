@@ -228,30 +228,21 @@ static AADError AADDecoder_CheckHeaderFormat(const struct AADHeaderInfo *header)
 }
 
 /* ヘッダのデコードとデコーダへのセット */
-AADApiResult AADDecoder_DecodeAndSetHeader(
-    struct AADDecoder *decoder, const uint8_t *data, uint32_t data_size)
+AADApiResult AADDecoder_SetHeader(
+    struct AADDecoder *decoder, const struct AADHeaderInfo *header)
 {
-  AADApiResult ret;
-  struct AADHeaderInfo tmp_header;
-
   /* 引数チェック */
-  if ((decoder == NULL) || (data == NULL)) {
+  if ((decoder == NULL) || (header == NULL)) {
     return AAD_APIRESULT_INVALID_ARGUMENT;
   }
 
-  /* ヘッダデコード */
-  if ((ret = AADDecoder_DecodeHeader(data, data_size, &tmp_header))
-      != AAD_APIRESULT_OK) {
-    return ret;
-  }
-
   /* ヘッダの有効性確認 */
-  if (AADDecoder_CheckHeaderFormat(&tmp_header) != AAD_ERROR_OK) {
+  if (AADDecoder_CheckHeaderFormat(header) != AAD_ERROR_OK) {
     return AAD_APIRESULT_INVALID_FORMAT;
   }
 
   /* ヘッダセット */
-  decoder->header = tmp_header;
+  decoder->header = (*header);
   decoder->set_header = 1;
 
   return AAD_APIRESULT_OK;
@@ -497,6 +488,7 @@ AADApiResult AADDecoder_DecodeWhole(
   uint32_t progress, ch, read_offset, read_block_size, num_decode_samples;
   const uint8_t *read_pos;
   int32_t *buffer_ptr[AAD_MAX_NUM_CHANNELS];
+  struct AADHeaderInfo tmp_header;
   const struct AADHeaderInfo *header;
 
   /* 引数チェック */
@@ -505,7 +497,11 @@ AADApiResult AADDecoder_DecodeWhole(
   }
 
   /* ヘッダデコードとデコーダへのセット */
-  if ((ret = AADDecoder_DecodeAndSetHeader(decoder, data, data_size))
+  if ((ret = AADDecoder_DecodeHeader(data, data_size, &tmp_header)) 
+      != AAD_APIRESULT_OK) {
+    return ret;
+  }
+  if ((ret = AADDecoder_SetHeader(decoder, &tmp_header))
       != AAD_APIRESULT_OK) {
     return ret;
   }
