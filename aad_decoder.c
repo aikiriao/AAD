@@ -227,7 +227,7 @@ static AADError AADDecoder_CheckHeaderFormat(const struct AADHeaderInfo *header)
   return AAD_ERROR_OK;
 }
 
-/* ヘッダのデコードとデコーダへのセット */
+/* ヘッダのデコーダへのセット */
 AADApiResult AADDecoder_SetHeader(
     struct AADDecoder *decoder, const struct AADHeaderInfo *header)
 {
