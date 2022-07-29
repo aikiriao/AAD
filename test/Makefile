@@ -3,7 +3,7 @@ CFLAGS 	  = -std=c89 -O0 -g3 -Wall -Wextra -Wpedantic -Wformat=2 -Wstrict-aliasi
 CPPFLAGS	= -DDEBUG
 LDFLAGS		=
 LDLIBS    = -lm
-SRC				= test_main.c test.c test_byte_array.c test_aad_encoder.c test_aad_decoder.c test_aad_encode_decode.c
+SRC				= test_main.c test.c test_byte_array.c test_aad_encoder.c test_aad_decoder.c test_aad_tables.c test_aad_encode_decode.c
 INCLUDE   = 
 OBJS	 		= $(SRC:%.c=%.o) 
 TARGET    = test 

@@ -1,15 +1,15 @@
 #include "aad_decoder.h"
-#include "aad_internal.h"
-#include "byte_array.h"
-
 #include <stdlib.h>
 #include <string.h>
+#include "aad_internal.h"
+#include "byte_array.h"
+#include "aad_tables.h"
 
 /* デコード処理ハンドル */
 struct AADDecodeProcessor {
   int16_t history[AAD_FILTER_ORDER];  /* 入力データ履歴 */
   int32_t weight[AAD_FILTER_ORDER];   /* フィルタ係数   */
-  int16_t stepsize_index;             /* ステップサイズテーブルの参照インデックス     */
+  struct AADTable table;              /* ステップサイズテーブル */
 };
 
 /* デコーダハンドル */
@@ -30,9 +30,6 @@ static AADError AADDecoder_CheckHeaderFormat(const struct AADHeaderInfo *header)
 /* 1サンプルデコード */
 static int32_t AADDecodeProcessor_DecodeSample(
     struct AADDecodeProcessor *processor, uint8_t code, uint8_t bits_per_sample);
-
-/* テーブル */
-#include "aad_tables.c"
 
 /* ワークサイズ計算 */
 int32_t AADDecoder_CalculateWorkSize(void)
@@ -231,6 +228,8 @@ static AADError AADDecoder_CheckHeaderFormat(const struct AADHeaderInfo *header)
 AADApiResult AADDecoder_SetHeader(
     struct AADDecoder *decoder, const struct AADHeaderInfo *header)
 {
+  uint32_t ch;
+
   /* 引数チェック */
   if ((decoder == NULL) || (header == NULL)) {
     return AAD_APIRESULT_INVALID_ARGUMENT;
@@ -239,6 +238,11 @@ AADApiResult AADDecoder_SetHeader(
   /* ヘッダの有効性確認 */
   if (AADDecoder_CheckHeaderFormat(header) != AAD_ERROR_OK) {
     return AAD_APIRESULT_INVALID_FORMAT;
+  }
+
+  /* テーブルの設定 */
+  for (ch = 0; ch < AAD_MAX_NUM_CHANNELS; ch++) {
+    AADTable_Initialize(&(decoder->processor[ch].table), header->bits_per_sample);
   }
 
   /* ヘッダセット */
@@ -259,15 +263,12 @@ static void AADDecodeProcessor_Reset(struct AADDecodeProcessor *processor)
     processor->history[i] = 0;
     processor->weight[i] = 0;
   }
-
-  processor->stepsize_index = 0;
 }
 
 /* 1サンプルデコード */
 static int32_t AADDecodeProcessor_DecodeSample(
     struct AADDecodeProcessor *processor, uint8_t code, uint8_t bits_per_sample)
 {
-  int16_t idx;
   int32_t sample, qdiff, delta, predict, stepsize, ord;
   const uint8_t signbit = (uint8_t)(1U << (bits_per_sample - 1));
   const uint8_t absmask = (uint8_t)(signbit - 1);
@@ -276,11 +277,8 @@ static int32_t AADDecodeProcessor_DecodeSample(
   AAD_ASSERT((bits_per_sample >= AAD_MIN_BITS_PER_SAMPLE) && (bits_per_sample <= AAD_MAX_BITS_PER_SAMPLE));
   AAD_ASSERT(code <= ((1U << bits_per_sample) - 1));
 
-  /* 頻繁に参照する変数をオート変数に受ける */
-  idx = processor->stepsize_index;
-
   /* ステップサイズの取得 */
-  stepsize = AAD_TABLES_GET_STEPSIZE(idx);
+  stepsize = AAD_TABLES_GET_STEPSIZE(&(processor->table));
 
   /* 差分算出 */
   /* diff = stepsize * (delta + 0.5) / 2**(bits_per_sample-2) */
@@ -302,10 +300,7 @@ static int32_t AADDecodeProcessor_DecodeSample(
   sample = AAD_INNER_VAL(sample, INT16_MIN, INT16_MAX);
 
   /* インデックス更新 */
-  AAD_TABLES_UPDATE_INDEX(idx, code, bits_per_sample);
-
-  /* 計算結果の反映 */
-  processor->stepsize_index = idx;
+  AADTable_UpdateIndex(&(processor->table), code);
 
   /* 係数更新 */
   for (ord = 0; ord < AAD_FILTER_ORDER; ord++) {
@@ -372,7 +367,7 @@ AADApiResult AADDecoder_DecodeBlock(
     /* ステップサイズインデックス12bit + 係数シフト量4bit */
     AAD_STATIC_ASSERT(AAD_TABLES_FLOAT_DIGITS == 4);
     ByteArray_GetUint16BE(read_pos, &u16buf);
-    decoder->processor[ch].stepsize_index = (int16_t)(u16buf >> AAD_TABLES_FLOAT_DIGITS);
+    decoder->processor[ch].table.stepsize_index = (int16_t)(u16buf >> AAD_TABLES_FLOAT_DIGITS);
     shift = u16buf & 0xF;
     /* フィルタの状態 */
     for (smpl = 0; smpl < AAD_FILTER_ORDER; smpl++) {

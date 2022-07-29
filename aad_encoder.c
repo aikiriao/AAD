@@ -1,17 +1,17 @@
 #include "aad_encoder.h"
-#include "aad_internal.h"
-#include "byte_array.h"
-
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include "aad_internal.h"
+#include "byte_array.h"
+#include "aad_tables.h"
 
 /* エンコード処理ハンドル */
 struct AADEncodeProcessor {
   int16_t history[AAD_FILTER_ORDER];  /* 入力データ履歴 */
   int32_t weight[AAD_FILTER_ORDER];   /* フィルタ係数   */
-  int16_t stepsize_index;             /* ステップサイズテーブルの参照インデックス */
   int32_t quantize_error;             /* 量子化誤差 */
+  struct AADTable table;              /* ステップサイズテーブル */
 };
 
 /* エンコーダ */
@@ -63,9 +63,6 @@ static AADApiResult AADEncoder_EncodeBlock(
 static AADError AADEncoder_ConvertParameterToHeader(
     const struct AADEncodeParameter *enc_param, uint32_t num_samples,
     struct AADHeaderInfo *header_info);
-
-/* テーブル */
-#include "aad_tables.c"
 
 /* 最大公約数の計算 */
 static uint32_t AADEncoder_CalculateGCD(uint32_t a, uint32_t b)
@@ -340,8 +337,6 @@ static void AADEncodeProcessor_Reset(struct AADEncodeProcessor *processor)
     processor->history[i] = 0;
     processor->weight[i] = 0;
   }
-
-  processor->stepsize_index = 0;
 }
 
 /* 1サンプルエンコード */
@@ -349,7 +344,6 @@ static uint8_t AADEncodeProcessor_EncodeSample(
     struct AADEncodeProcessor *processor, int32_t sample, uint8_t bits_per_sample)
 {
   uint8_t code;
-  int16_t idx;
   int32_t predict, diff, qdiff, delta, stepsize, diffabs, sign;
   int32_t quantize_sample, ord;
   const uint8_t signbit = (uint8_t)(1U << (bits_per_sample - 1));
@@ -357,12 +351,9 @@ static uint8_t AADEncodeProcessor_EncodeSample(
 
   AAD_ASSERT(processor != NULL);
   AAD_ASSERT((bits_per_sample >= AAD_MIN_BITS_PER_SAMPLE) && (bits_per_sample <= AAD_MAX_BITS_PER_SAMPLE));
-  
-  /* 頻繁に参照する変数をオート変数に受ける */
-  idx = processor->stepsize_index;
 
   /* ステップサイズの取得 */
-  stepsize = AAD_TABLES_GET_STEPSIZE(idx);
+  stepsize = AAD_TABLES_GET_STEPSIZE(&(processor->table));
 
   /* フィルタ予測 */
   predict = AAD_FIXEDPOINT_0_5;
@@ -392,10 +383,9 @@ static uint8_t AADEncodeProcessor_EncodeSample(
   qdiff = (sign) ? -qdiff : qdiff; /* 符号ビットの反映 */
 
   /* インデックス更新 */
-  AAD_TABLES_UPDATE_INDEX(idx, code, bits_per_sample);
+  AADTable_UpdateIndex(&(processor->table), code);
 
   /* 計算結果の反映 */
-  processor->stepsize_index = idx;
   processor->quantize_error = qdiff;
 
   /* 量子化後のサンプル値 */
@@ -652,7 +642,7 @@ static AADApiResult AADEncoder_EncodeBlock(
     /* ステップサイズインデックス12bit + 係数シフト量4bit */
     AAD_STATIC_ASSERT(AAD_TABLES_FLOAT_DIGITS == 4);
     AAD_ASSERT(shift <= 0xF);
-    u16buf = (uint16_t)(encoder->processor[ch].stepsize_index << AAD_TABLES_FLOAT_DIGITS);
+    u16buf = (uint16_t)(encoder->processor[ch].table.stepsize_index << AAD_TABLES_FLOAT_DIGITS);
     u16buf = (uint16_t)(u16buf | (shift & 0xF));
     ByteArray_PutUint16BE(data_pos, u16buf);
     /* フィルタの状態を出力 係数はシフトして記録 */
@@ -789,6 +779,7 @@ static AADError AADEncoder_ConvertParameterToHeader(
 AADApiResult AADEncoder_SetEncodeParameter(
     struct AADEncoder *encoder, const struct AADEncodeParameter *parameter)
 {
+  uint32_t ch;
   struct AADHeaderInfo tmp_header = { 0, };
 
   /* 引数チェック */
@@ -800,6 +791,11 @@ AADApiResult AADEncoder_SetEncodeParameter(
   /* 総サンプル数はダミー値を入れる */
   if (AADEncoder_ConvertParameterToHeader(parameter, 0, &tmp_header) != AAD_ERROR_OK) {
     return AAD_APIRESULT_INVALID_FORMAT;
+  }
+
+  /* テーブルの初期化 */
+  for (ch = 0; ch < AAD_MAX_NUM_CHANNELS; ch++) {
+    AADTable_Initialize(&(encoder->processor[ch].table), parameter->bits_per_sample);
   }
 
   /* エンコード繰り返し回数のセット */

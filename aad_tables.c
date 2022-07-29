@@ -1,52 +1,8 @@
-/* 多重インクルード防止 */
-#ifndef AAD_TABLES_C_INCLUDED
-#define AAD_TABLES_C_INCLUDED
+#include "aad_tables.h"
+#include <stddef.h>
 
-#include "aad_internal.h"
-#include <stdint.h>
-
-/* 固定小数部の桁数 */
-#define AAD_TABLES_FLOAT_DIGITS                   4
-/* 固定小数の0.5 */
-#define AAD_TABLES_FLOAT_0_5                      (1 << (AAD_TABLES_FLOAT_DIGITS - 1))
 /* インデックス変動テーブルの要素定義マクロ */
 #define AAD_TABLES_DEFINE_INDEX_TABLE_ENTRY(flt)  (int16_t)((flt) * (1 << AAD_TABLES_FLOAT_DIGITS))
-/* 固定小数 -> ステップサイズテーブルインデックス */
-#define AAD_TABLES_FLOAT_TO_INDEX(flt)            (((flt) + AAD_TABLES_FLOAT_0_5) >> AAD_TABLES_FLOAT_DIGITS)
-/* ステップサイズテーブルインデックス -> 固定小数 */
-#define AAD_TABLES_INDEX_TO_FLOAT(idx)            ((idx) << AAD_TABLES_FLOAT_DIGITS)
-/* 固定小数表記されたインデックスの更新 */
-#define AAD_TABLES_UPDATE_INDEX(flt, code, bits_per_sample)\
-    do {\
-        const int16_t *ptable__ = NULL;\
-        /* テーブルの選択 */\
-        switch (bits_per_sample) {\
-        case 4:\
-            AAD_ASSERT((code) < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_4bit));\
-            ptable__ = &AAD_index_table_4bit[0];\
-            break;\
-        case 3:\
-            AAD_ASSERT((code) < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_3bit));\
-            ptable__ = &AAD_index_table_3bit[0];\
-            break;\
-        case 2:\
-            AAD_ASSERT((code) < AAD_NUM_TABLE_ELEMENTS(AAD_index_table_2bit));\
-            ptable__ = &AAD_index_table_2bit[0];\
-            break;\
-        default: AAD_ASSERT(0);\
-        }\
-        /* テーブルインデックスの更新 */\
-        (flt) = (int16_t)((flt) + (ptable__)[(code)]);\
-        /* インデックスの範囲内でクリップ */\
-        (flt) = AAD_INNER_VAL((flt), 0,\
-                AAD_TABLES_INDEX_TO_FLOAT(\
-                    (int16_t)AAD_NUM_TABLE_ELEMENTS(AAD_stepsize_table) - 1));\
-        /* インデックス範囲チェック */\
-        AAD_ASSERT(AAD_TABLES_FLOAT_TO_INDEX(flt)\
-                < (int16_t)AAD_NUM_TABLE_ELEMENTS(AAD_stepsize_table));\
-    } while (0);
-/* ステップサイズ取得 */
-#define AAD_TABLES_GET_STEPSIZE(flt)              (AAD_stepsize_table[AAD_TABLES_FLOAT_TO_INDEX(flt)])
 
 /* インデックス変動テーブル: 4bit */
 static const int16_t AAD_index_table_4bit[16] = {
@@ -99,7 +55,7 @@ static const int16_t AAD_index_table_1bit[2] = {
 
 /* ステップサイズ量子化テーブル */
 /* x ** 1.1 + 2 ** (log2(32767 - 255 ** 1.1) / 255 * x) で生成 */
-static const uint16_t AAD_stepsize_table[256] = {
+static const uint16_t AAD_stepsize_table[AAD_STEPSIZE_TABLE_SIZE] = {
   1, 2, 3, 4, 6, 7, 8, 10,
   11, 13, 14, 16, 17, 18, 20, 22,
   23, 25, 26, 28, 29, 31, 32, 34,
@@ -134,4 +90,28 @@ static const uint16_t AAD_stepsize_table[256] = {
   24737, 25749, 26803, 27901, 29044, 30235, 31475, 32767,
 };
 
-#endif /* AAD_TABLES_C_INCLUDED */
+/* テーブルの初期化 */
+void AADTable_Initialize(struct AADTable *table, uint16_t bits_per_sample)
+{
+  AAD_ASSERT(table != NULL);
+
+  switch (bits_per_sample) {
+  case 4:
+    table->index_table = AAD_index_table_4bit;
+    table->index_table_size = AAD_NUM_TABLE_ELEMENTS(AAD_index_table_4bit);
+    break;
+  case 3:
+    table->index_table = AAD_index_table_3bit;
+    table->index_table_size = AAD_NUM_TABLE_ELEMENTS(AAD_index_table_3bit);
+    break;
+  case 2:
+    table->index_table = AAD_index_table_2bit;
+    table->index_table_size = AAD_NUM_TABLE_ELEMENTS(AAD_index_table_2bit);
+    break;
+  default:
+    AAD_ASSERT(0);
+  }
+
+  table->stepsize_index = 0;
+  table->stepsize_table = &AAD_stepsize_table[0];
+}
