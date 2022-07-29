@@ -15,8 +15,6 @@
 #define AAD_TABLES_FLOAT_TO_INDEX(flt) (((flt) + AAD_TABLES_FLOAT_0_5) >> AAD_TABLES_FLOAT_DIGITS)
 /* ステップサイズテーブルインデックス -> 固定小数 */
 #define AAD_TABLES_INDEX_TO_FLOAT(idx) ((idx) << AAD_TABLES_FLOAT_DIGITS)
-/* ステップサイズ取得 */
-#define AAD_TABLES_GET_STEPSIZE(table) ((table)->stepsize_table[AAD_TABLES_FLOAT_TO_INDEX((table)->stepsize_index)])
 
 /* テーブル */
 struct AADTable {
@@ -25,6 +23,9 @@ struct AADTable {
   int16_t stepsize_index;
   const uint16_t *stepsize_table;
 };
+
+/* ステップサイズ取得 */
+#define AADTable_GetStepSize(table) ((table)->stepsize_table[AAD_TABLES_FLOAT_TO_INDEX((table)->stepsize_index)])
 
 /* インデックスの更新 */
 #define AADTable_UpdateIndex(table, code)\

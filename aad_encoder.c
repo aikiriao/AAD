@@ -353,7 +353,7 @@ static uint8_t AADEncodeProcessor_EncodeSample(
   AAD_ASSERT((bits_per_sample >= AAD_MIN_BITS_PER_SAMPLE) && (bits_per_sample <= AAD_MAX_BITS_PER_SAMPLE));
 
   /* ステップサイズの取得 */
-  stepsize = AAD_TABLES_GET_STEPSIZE(&(processor->table));
+  stepsize = AADTable_GetStepSize(&(processor->table));
 
   /* フィルタ予測 */
   predict = AAD_FIXEDPOINT_0_5;

@@ -278,7 +278,7 @@ static int32_t AADDecodeProcessor_DecodeSample(
   AAD_ASSERT(code <= ((1U << bits_per_sample) - 1));
 
   /* ステップサイズの取得 */
-  stepsize = AAD_TABLES_GET_STEPSIZE(&(processor->table));
+  stepsize = AADTable_GetStepSize(&(processor->table));
 
   /* 差分算出 */
   /* diff = stepsize * (delta + 0.5) / 2**(bits_per_sample-2) */
