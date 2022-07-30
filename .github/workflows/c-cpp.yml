@@ -28,4 +28,4 @@ jobs:
       with:
         name: artifacts
         path: |
-          aad-${steps.get_version.outputs.VERSION}.tar.gz
+          aad-${{ steps.get_version.outputs.VERSION }}.tar.gz
