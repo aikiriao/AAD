@@ -1,0 +1,26 @@
+name: make artifact
+
+"on":
+  push:
+    tags:
+      - "v*"
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checuout
+        uses: actions/checkout@v2
+      - name: Get the version
+        id: get_version
+        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      - name: make
+        run: make
+      - name: create artifact on UNIX platform
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: tar -czf aad-${{ steps.get_version.outputs.VERSION }}.tar.gz aad
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: artifacts
+          path: |
+            aad-${{ steps.get_version.outputs.VERSION }}.tar.gz
