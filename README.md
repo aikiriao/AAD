@@ -1,4 +1,9 @@
 ![C/C++ CI](https://github.com/aikiriao/AAD/workflows/C/C++%20CI/badge.svg?branch=master)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/aikiriao/AAD)
+![GitHub Release Date](https://img.shields.io/github/release-date/aikiriao/AAD)
+![GitHub repo size](https://img.shields.io/github/repo-size/aikiriao/AAD)
+![GitHub all releases](https://img.shields.io/github/downloads/aikiriao/AAD/total)
+![GitHub](https://img.shields.io/github/license/aikiriao/AAD)
 
 # AAD
 
