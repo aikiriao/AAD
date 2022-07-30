@@ -17,3 +17,15 @@ jobs:
       run: make
     - name: unittest
       run: cd test; make run
+    - name: Get the version
+      id: get_version
+      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+    - name: create artifact on UNIX platform
+      if: runner.os == 'Linux' || runner.os == 'macOS'
+      run: tar -czf aad-${steps.get_version.outputs.VERSION}.tar.gz aad
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: artifacts
+        path: |
+          aad-${steps.get_version.outputs.VERSION}.tar.gz
