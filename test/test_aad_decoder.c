@@ -6,13 +6,13 @@
 #include <assert.h>
 
 /* テスト対象のモジュール */
-#include "../aad_decoder.c"
+#include "../src/aad_decoder.c"
 
 /* テストデータ作成のためにエンコーダを使う */
-#include "../aad_encoder.h"
+#include "../src/aad_encoder.h"
 
 /* リファレンス一致確認のためにwavを使用 */
-#include "../wav.h"
+#include "../src/wav.h"
 
 /* テストのセットアップ関数 */
 void AADDecoderTest_Setup(void);

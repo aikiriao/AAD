@@ -7,11 +7,11 @@
 #include "test.h"
 
 /* テスト対象のモジュール */
-#include "../aad_encoder.h"
-#include "../aad_decoder.h"
+#include "../src/aad_encoder.h"
+#include "../src/aad_decoder.h"
 
 /* 追加でwavを使う */
-#include "../wav.c"
+#include "../src/wav.c"
 
 /* テストのセットアップ関数 */
 void AADEncodeDecodeTest_Setup(void);

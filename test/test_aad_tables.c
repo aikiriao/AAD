@@ -3,7 +3,7 @@
 #include <string.h>
 
 /* テスト対象のモジュール */
-#include "../aad_tables.c"
+#include "../src/aad_tables.c"
 
 /* テストのセットアップ関数 */
 void AADTablesTest_Setup(void);

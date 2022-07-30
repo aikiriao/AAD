@@ -3,7 +3,7 @@
 #include "test.h"
 
 /* テスト対象のモジュール */
-#include "../byte_array.h"
+#include "../src/byte_array.h"
 
 /* テストのセットアップ関数 */
 void ByteArrayTest_Setup(void);

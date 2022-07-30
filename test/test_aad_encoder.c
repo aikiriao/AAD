@@ -3,7 +3,7 @@
 #include <string.h>
 
 /* テスト対象のモジュール */
-#include "../aad_encoder.c"
+#include "../src/aad_encoder.c"
 
 /* テストのセットアップ関数 */
 void AADEncoderTest_Setup(void);
