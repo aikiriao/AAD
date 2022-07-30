@@ -2,6 +2,7 @@ name: make artifact
 
 "on":
   push:
+    branches: [ master ]
     tags:
       - "v*"
 jobs:
